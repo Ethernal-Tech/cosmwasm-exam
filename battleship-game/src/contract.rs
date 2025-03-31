@@ -1,11 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    Deps, DepsMut, Empty, Env, MessageInfo, Response, Uint128
+    to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, Uint128
 };
 
 use crate::{
-    msg::InstantiateMsg, 
+    msg::{InstantiateMsg, QueryMsg}, 
     state::{Board, Player, ADMIN, PLAYERS, SHIPS}, ContractError
 };
 
@@ -76,11 +76,16 @@ pub fn execute(
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(
-    _deps: Deps,
+    deps: Deps,
     _env: Env,
-    _msg: Empty
-) -> Response {
-    unimplemented!();
+    msg: QueryMsg
+) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::GetAdmin {} => to_json_binary(&query::get_admin(deps)?),
+        QueryMsg::GetPlayers {} => to_json_binary(&query::get_players(deps)?),
+        QueryMsg::GetShips {} => to_json_binary(&query::get_ships(deps)?),
+        QueryMsg::GetTurn {} => to_json_binary(&query::get_turn(deps)?)
+    }
 }
 
 mod execute {
@@ -88,10 +93,34 @@ mod execute {
 }
 
 mod query {
+    use cosmwasm_std::{Addr, Order};
 
-}
+    use crate::state::TURN;
 
-#[cfg(test)]
-mod tests {
+    use super::*;
 
+    pub fn get_admin(deps: Deps) -> StdResult<Addr> {
+        let admin = ADMIN.load(deps.storage);
+        Ok(admin?)
+    }
+
+    pub fn get_players(deps: Deps) -> StdResult<Vec<Player>> {
+        PLAYERS
+            .range(deps.storage, None, None, Order::Ascending)
+            .map(|item| {
+                let (_addr, player) = item?;
+                Ok(player)
+            })
+            .collect()
+    }
+
+    pub fn get_ships(deps: Deps) -> StdResult<Uint128> {
+        let ships = SHIPS.load(deps.storage);
+        Ok(ships?)
+    }
+
+    pub fn get_turn(deps: Deps) -> StdResult<Addr> {
+        let turn = TURN.load(deps.storage);
+        Ok(turn?)
+    }
 }

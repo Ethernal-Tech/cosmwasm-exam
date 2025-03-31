@@ -14,3 +14,11 @@ pub struct InstantiateMsg {
     pub ships: u128,
     pub players: Vec<PlayerInstantiate>,
 }
+
+#[cw_serde]
+pub enum QueryMsg {
+    GetAdmin {},
+    GetPlayers {},
+    GetTurn {},
+    GetShips {},
+}
