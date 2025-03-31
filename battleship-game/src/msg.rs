@@ -1,5 +1,7 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Addr, Uint128};
+
+use crate::state::Player;
 
 #[cw_serde]
 pub struct PlayerInstantiate {
@@ -21,4 +23,29 @@ pub enum QueryMsg {
     GetPlayers {},
     GetTurn {},
     GetShips {},
+}
+
+#[cw_serde]
+pub enum ExecuteMsg {
+    Play {},
+}
+
+#[cw_serde]
+pub struct AdminResponse {
+    pub admin: Addr
+}
+
+#[cw_serde]
+pub struct PlayersResponse {
+    pub players: Vec<Player>
+}
+
+#[cw_serde]
+pub struct ShipsResponse {
+    pub ships: Uint128
+}
+
+#[cw_serde]
+pub struct TurnResponse {
+    pub turn: Addr
 }

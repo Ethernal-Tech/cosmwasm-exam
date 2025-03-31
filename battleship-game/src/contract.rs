@@ -1,12 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Empty, Env, MessageInfo, Response, StdResult, Uint128
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128
 };
 
 use crate::{
-    msg::{InstantiateMsg, QueryMsg}, 
-    state::{Board, Player, ADMIN, PLAYERS, SHIPS}, ContractError
+    msg::{ExecuteMsg, InstantiateMsg, QueryMsg}, 
+    state::{Board, Player, ADMIN, PLAYERS, SHIPS, TURN}, ContractError
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -24,6 +24,8 @@ pub fn instantiate(
         return Err(ContractError::InvalidShips {});
     }
     SHIPS.save(deps.storage, &Uint128::new(ships))?;
+
+    TURN.save(deps.storage, &deps.api.addr_validate(&msg.players[0].address)?)?;
 
     for player in msg.players {
         let address = deps.api.addr_validate(&player.address)?;
@@ -69,8 +71,8 @@ pub fn execute(
     _deps: DepsMut,
     _env: Env,
     _info: MessageInfo,
-    _msg: Empty
-) -> Response {
+    _msg: ExecuteMsg
+) -> Result<Response, ContractError> {
     unimplemented!();
 }
 
@@ -93,15 +95,15 @@ mod execute {
 }
 
 mod query {
-    use cosmwasm_std::{Addr, Order};
+    use cosmwasm_std::Order;
 
-    use crate::state::TURN;
+    use crate::{msg::{AdminResponse, ShipsResponse, TurnResponse}, state::TURN};
 
     use super::*;
 
-    pub fn get_admin(deps: Deps) -> StdResult<Addr> {
+    pub fn get_admin(deps: Deps) -> StdResult<AdminResponse> {
         let admin = ADMIN.load(deps.storage);
-        Ok(admin?)
+        Ok(AdminResponse { admin: admin? })
     }
 
     pub fn get_players(deps: Deps) -> StdResult<Vec<Player>> {
@@ -114,13 +116,13 @@ mod query {
             .collect()
     }
 
-    pub fn get_ships(deps: Deps) -> StdResult<Uint128> {
+    pub fn get_ships(deps: Deps) -> StdResult<ShipsResponse> {
         let ships = SHIPS.load(deps.storage);
-        Ok(ships?)
+        Ok(ShipsResponse { ships: ships? })
     }
 
-    pub fn get_turn(deps: Deps) -> StdResult<Addr> {
+    pub fn get_turn(deps: Deps) -> StdResult<TurnResponse> {
         let turn = TURN.load(deps.storage);
-        Ok(turn?)
+        Ok(TurnResponse { turn: turn? })
     }
 }
