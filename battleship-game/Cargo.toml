@@ -1,0 +1,22 @@
+[package]
+name = "battleship-game"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std = { version = "2.2.2", features = ["staking"] }
+serde = { version = "1.0.103", default-features = false, features = ["derive"] }
+cw-storage-plus = "2.0.0"
+thiserror = "2.0.12"
+schemars = "0.8.1"
+cw-utils = "2.0.0"
+cosmwasm-schema = "2.2.2"
+
+[dev-dependencies]
+cw-multi-test = "2.3.2"
