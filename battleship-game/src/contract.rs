@@ -39,7 +39,7 @@ pub fn instantiate(
 
         let board = Board {
             fields: player.board,
-            sinked: vec![],
+            sank: vec![],
         };
 
         let player = Player {
@@ -114,49 +114,51 @@ mod execute {
         }
 
         let oponent = PLAYERS
-        .range(deps.storage, None, None, Order::Ascending)
-        .find_map(|item| {
-            let (addr, player_data) = item.ok()?;
-            if addr != player {
-                Some(player_data)
-            } else {
-                None
-            }
+            .range(deps.storage, None, None, Order::Ascending)
+            .find_map(|item| {
+                let (addr, player_data) = item.ok()?;
+                if addr != player {
+                    Some(player_data)
+                } else {
+                    None
+                }
         })
         .ok_or(ContractError::PlayerNotFound {  });
 
         let oponent = oponent?;
 
-        let oponent_sinked = &oponent.board.sinked;
+        let oponent_sinked = &oponent.board.sank;
         if oponent_sinked.contains(&field) {
-            return Err(ContractError::AlreadySinked {});
+            return Err(ContractError::AlreadySunk {});
         }
 
         let oponent_board = &oponent.board.fields;
         if oponent_board[field.0][field.1] {
             let oponent = PLAYERS.update::<_, ContractError>(deps.storage, oponent.address.clone(), |player| {
                 let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
-                player.board.sinked.push(field);
+                player.board.sank.push(field);
                 Ok(player)
             })?;
 
-            let mut event = "ship_sinked";
-            if oponent.board.sinked.len() == SHIPS.load(deps.storage)? {
+            let mut event = "ship_sank";
+            if oponent.board.sank.len() == SHIPS.load(deps.storage)? {
                 event = "game_won";
                 FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
             }
 
+            TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
             return Ok(
                 Response::new()
                     .add_attribute("action", "play")
-                    .add_event(Event::new(event))
+                    .add_event(Event::new(event).add_attribute("sank", format!("{:?}", field)))
             );
         }
 
+        TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
         Ok(
             Response::new()
                 .add_attribute("action", "play")
-                .add_event(Event::new("ship_missed"))
+                .add_event(Event::new("ship_missed").add_attribute("missed", format!("{:?}", field)))
         )
 
     }

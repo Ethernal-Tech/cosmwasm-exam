@@ -18,8 +18,8 @@ pub enum ContractError {
     #[error("Player not found.")]
     PlayerNotFound {},
 
-    #[error("Already sinked.")]
-    AlreadySinked {},
+    #[error("Already sunk.")]
+    AlreadySunk {},
 
     #[error("Game is over.")]
     GameFinished {},
