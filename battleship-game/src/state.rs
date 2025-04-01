@@ -6,12 +6,12 @@ use cw_storage_plus::{Item, Map};
 pub const ADMIN: Item<Addr> = Item::new("admin");
 
 // amount of ships to sink
-pub const SHIPS: Item<Uint128> = Item::new("ships");
+pub const SHIPS: Item<usize> = Item::new("ships");
 
 #[cw_serde]
 pub struct Board {
     pub fields: Vec<Vec<bool>>,
-    pub sinked: Vec<(u64, u64)>,
+    pub sinked: Vec<(usize, usize)>,
 }
 
 #[cw_serde]
@@ -26,3 +26,6 @@ pub const PLAYERS: Map<Addr, Player> = Map::new("players");
 
 // current turn
 pub const TURN: Item<Addr> = Item::new("turn");
+
+// game finished
+pub const FINISHED: Item<bool> = Item::new("finished");

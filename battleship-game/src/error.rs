@@ -12,4 +12,16 @@ pub enum ContractError {
     #[error("Invalid board.")]
     InvalidBoard {},
 
+    #[error("Wrong player to play.")]
+    WrongTurn {},
+
+    #[error("Player not found.")]
+    PlayerNotFound {},
+
+    #[error("Already sinked.")]
+    AlreadySinked {},
+
+    #[error("Game is over.")]
+    GameFinished {},
+
 }

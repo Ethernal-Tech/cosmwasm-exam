@@ -1,12 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult
 };
 
 use crate::{
     msg::{ExecuteMsg, InstantiateMsg, QueryMsg}, 
-    state::{Board, Player, ADMIN, PLAYERS, SHIPS, TURN}, ContractError
+    state::{Board, Player, ADMIN, FINISHED, PLAYERS, SHIPS, TURN}, ContractError
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -23,9 +23,11 @@ pub fn instantiate(
     if ships == 0 {
         return Err(ContractError::InvalidShips {});
     }
-    SHIPS.save(deps.storage, &Uint128::new(ships))?;
+    SHIPS.save(deps.storage, &ships)?;
 
     TURN.save(deps.storage, &deps.api.addr_validate(&msg.players[0].address)?)?;
+
+    FINISHED.save(deps.storage, &false)?;
 
     for player in msg.players {
         let address = deps.api.addr_validate(&player.address)?;
@@ -52,8 +54,8 @@ pub fn instantiate(
     Ok(Response::new())
 }
 
-pub fn validate_board(board: &Vec<Vec<bool>>, ships: u128) -> bool {
-    let mut count = 0u128;
+pub fn validate_board(board: &Vec<Vec<bool>>, ships: usize) -> bool {
+    let mut count = 0;
 
     for row in board {
         for cell in row {
@@ -68,12 +70,14 @@ pub fn validate_board(board: &Vec<Vec<bool>>, ships: u128) -> bool {
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
-    _deps: DepsMut,
+    deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
-    _msg: ExecuteMsg
+    info: MessageInfo,
+    msg: ExecuteMsg
 ) -> Result<Response, ContractError> {
-    unimplemented!();
+    match msg {
+        ExecuteMsg::Play {field} => execute::play(deps, info, field)
+    }
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -91,7 +95,71 @@ pub fn query(
 }
 
 mod execute {
-    
+    use cosmwasm_std::{Event, Order};
+
+    use super::*;
+
+    pub fn play(
+        deps: DepsMut,
+        info: MessageInfo,
+        field: (usize, usize)
+    ) -> Result<Response, ContractError> {
+        if FINISHED.load(deps.storage)? {
+            return Err(ContractError::GameFinished {});
+        }
+
+        let player = info.sender;
+        if player != TURN.load(deps.storage)? {
+            return Err(ContractError::WrongTurn {  })
+        }
+
+        let oponent = PLAYERS
+        .range(deps.storage, None, None, Order::Ascending)
+        .find_map(|item| {
+            let (addr, player_data) = item.ok()?;
+            if addr != player {
+                Some(player_data)
+            } else {
+                None
+            }
+        })
+        .ok_or(ContractError::PlayerNotFound {  });
+
+        let oponent = oponent?;
+
+        let oponent_sinked = &oponent.board.sinked;
+        if oponent_sinked.contains(&field) {
+            return Err(ContractError::AlreadySinked {});
+        }
+
+        let oponent_board = &oponent.board.fields;
+        if oponent_board[field.0][field.1] {
+            let oponent = PLAYERS.update::<_, ContractError>(deps.storage, oponent.address.clone(), |player| {
+                let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
+                player.board.sinked.push(field);
+                Ok(player)
+            })?;
+
+            let mut event = "ship_sinked";
+            if oponent.board.sinked.len() == SHIPS.load(deps.storage)? {
+                event = "game_won";
+                FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
+            }
+
+            return Ok(
+                Response::new()
+                    .add_attribute("action", "play")
+                    .add_event(Event::new(event))
+            );
+        }
+
+        Ok(
+            Response::new()
+                .add_attribute("action", "play")
+                .add_event(Event::new("ship_missed"))
+        )
+
+    }
 }
 
 mod query {

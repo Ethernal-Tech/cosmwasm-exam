@@ -9,7 +9,7 @@ pub mod tests {
         }, state::Player, ContractError
     };
 
-    pub fn mock_instantiate_msg(ships: u128) -> InstantiateMsg {
+    pub fn mock_instantiate_msg(ships: usize) -> InstantiateMsg {
         InstantiateMsg {
             admin: "admin".into_addr().to_string(),
             ships: ships,
@@ -71,7 +71,7 @@ pub mod tests {
             .query_wasm_smart(address.clone(), &QueryMsg::GetShips {})
             .unwrap();
 
-        assert_eq!(response.ships, Uint128::new(4));
+        assert_eq!(response.ships, 4);
 
         let response: TurnResponse = app
             .wrap()
