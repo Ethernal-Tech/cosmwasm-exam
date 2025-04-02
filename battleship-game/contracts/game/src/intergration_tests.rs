@@ -13,6 +13,7 @@ pub mod tests {
         InstantiateMsg {
             admin: "admin".into_addr().to_string(),
             ships: ships,
+            token_address: "token".into_addr().to_string(),
             players: vec![
                 PlayerInstantiate {
                     address: "player1".into_addr().to_string(),

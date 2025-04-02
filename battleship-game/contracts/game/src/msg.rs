@@ -13,6 +13,7 @@ pub struct PlayerInstantiate {
 #[cw_serde]
 pub struct InstantiateMsg {
     pub admin: String,
+    pub token_address: String,
     pub ships: usize,
     pub players: Vec<PlayerInstantiate>,
 }
@@ -27,6 +28,7 @@ pub enum QueryMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
+    StartGame {},
     Play {field: (usize, usize)},
 }
 

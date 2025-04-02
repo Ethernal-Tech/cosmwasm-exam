@@ -13,6 +13,7 @@ Implements:
 For more information on this contract, please check out the
 [README](https://github.com/CosmWasm/cw-plus/blob/main/contracts/cw20-base/README.md).
 */
+#![allow(deprecated)]
 
 pub mod allowances;
 pub mod contract;

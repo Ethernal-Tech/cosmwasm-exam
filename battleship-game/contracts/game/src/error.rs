@@ -24,4 +24,25 @@ pub enum ContractError {
     #[error("Game is over.")]
     GameFinished {},
 
+    #[error("Invalid stake amount.")]
+    InvalidStake {},
+
+    #[error("Game has already started.")]
+    GameStarted {},
+
+    #[error("Unauthorized access.")]
+    Unauthorized {},
+
+    #[error("Game not started.")]
+    GameNotStarted {},
+
+    #[error("Overflow occurred during math operation.")]
+    Overflow {},
+
 }
+
+// impl From<OverflowError> for ContractError {
+//     fn from(_: OverflowError) -> Self {
+//         ContractError::Overflow {}
+//     }
+// }
