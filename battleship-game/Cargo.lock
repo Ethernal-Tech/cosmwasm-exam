@@ -176,6 +176,7 @@ dependencies = [
  "cw-utils",
  "cw2",
  "cw20",
+ "cw20-base",
  "schemars",
  "serde",
  "thiserror 2.0.12",

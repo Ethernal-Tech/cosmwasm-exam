@@ -1,7 +1,12 @@
 #[cfg(test)]
 pub mod tests {
+    use std::str::FromStr;
+
     use cosmwasm_std::{Addr, Uint128};
+    use cw20::{Cw20QueryMsg, BalanceResponse};
     use cw_multi_test::{App, ContractWrapper, Executor, IntoAddr};
+    use cw20_base::contract::{instantiate as cw20_instantiate, execute as cw20_execute, query as cw20_query};
+    use cw20_base::msg::{InstantiateMsg as Cw20InstantiateMsg, ExecuteMsg as Cw20ExecuteMsg};
     use crate::{
         contract::{execute, instantiate, query}, 
         msg::{
@@ -9,11 +14,11 @@ pub mod tests {
         }, state::Player, ContractError
     };
 
-    pub fn mock_instantiate_msg(ships: usize) -> InstantiateMsg {
+    pub fn mock_instantiate_msg(ships: usize, token_address: Addr) -> InstantiateMsg {
         InstantiateMsg {
             admin: "admin".into_addr().to_string(),
             ships: ships,
-            token_address: "token".into_addr().to_string(),
+            token_address: token_address.to_string(),
             players: vec![
                 PlayerInstantiate {
                     address: "player1".into_addr().to_string(),
@@ -37,28 +42,107 @@ pub mod tests {
         }
     }
 
-    pub fn init_app() -> (Addr, App) {
+    pub fn mock_cw20_instantiate_msg(
+        player1_addr: Addr, 
+        player2_addr: Addr,
+        admin_addr: Addr
+    ) -> Cw20InstantiateMsg {
+        Cw20InstantiateMsg {
+            name: "BattleToken".to_string(),
+            symbol: "BTL".to_string(),
+            decimals: 6,
+            initial_balances: vec![
+                cw20::Cw20Coin {
+                    address: player1_addr.to_string(),
+                    amount: Uint128::new(1_000_000),
+                },
+                cw20::Cw20Coin {
+                    address: player2_addr.to_string(),
+                    amount: Uint128::new(1_000_000),
+                },
+            ],
+            mint: Some(cw20::MinterResponse {
+                minter: admin_addr.to_string(),
+                cap: None,
+            }),
+            marketing: None,
+        }
+    }
+
+    pub fn init_app(player1_addr: Addr, player2_addr: Addr) -> (Addr, Addr, App) {
         let mut app = App::default();
 
-        let code = ContractWrapper::new(execute, instantiate, query);
-        let code_id = app.store_code(Box::new(code));
+        let cw20_code = ContractWrapper::new(cw20_execute, cw20_instantiate, cw20_query);
+        let cw20_code_id = app.store_code(Box::new(cw20_code));
 
-        let addr = app
+        let admin_addr = "admin".into_addr();
+
+        let cw20_addr = app
             .instantiate_contract(
-                code_id, 
+                cw20_code_id, 
+                "owner".into_addr(), 
+                &mock_cw20_instantiate_msg(
+                    player1_addr.clone(), 
+                    player2_addr.clone(), 
+                    admin_addr.clone()
+                ), 
+                &[], 
+                "cw20-token", 
+                None)
+            .unwrap();
+
+        let game_code = ContractWrapper::new(execute, instantiate, query);
+        let game_code_id = app.store_code(Box::new(game_code));
+
+        let game_addr = app
+            .instantiate_contract(
+                game_code_id, 
                 "owner".into_addr(),
-                &mock_instantiate_msg(1), 
+                &mock_instantiate_msg(1, cw20_addr.clone()), 
                 &[], 
                 "Contract", 
                 None
-            ).unwrap();
+        ).unwrap();
 
-        (addr, app)
+        app.execute_contract(
+            admin_addr,
+            cw20_addr.clone(),
+            &Cw20ExecuteMsg::UpdateMinter {
+                new_minter: Some(game_addr.to_string()),
+            },
+            &[],
+        ).unwrap();
+
+        app.execute_contract(
+            player1_addr,
+            cw20_addr.clone(),
+            &Cw20ExecuteMsg::IncreaseAllowance { 
+                spender: game_addr.to_string(),
+                amount: Uint128::new(100_000), 
+                expires: None 
+            },
+            &[]
+        ).unwrap();
+
+        app.execute_contract(
+            player2_addr,
+            cw20_addr.clone(),
+            &Cw20ExecuteMsg::IncreaseAllowance { 
+                spender: game_addr.to_string(),
+                amount: Uint128::new(100_000), 
+                expires: None 
+            },
+            &[]
+        ).unwrap();
+
+        (cw20_addr, game_addr, app)
     }
 
     #[test]
     fn instantiation() {
-        let (address,app) = init_app();
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, address, mut app) = init_app(player1_addr, player2_addr);
 
         let response: AdminResponse = app
             .wrap()
@@ -116,7 +200,7 @@ pub mod tests {
             .instantiate_contract(
                 code_id, 
                 "owner".into_addr(),
-                &mock_instantiate_msg(0), 
+                &mock_instantiate_msg(0, "token".into_addr()), 
                 &[], 
                 "Contract", 
                 None
@@ -136,7 +220,7 @@ pub mod tests {
             .instantiate_contract(
                 code_id, 
                 "owner".into_addr(),
-                &mock_instantiate_msg(3), 
+                &mock_instantiate_msg(3, "token".into_addr()), 
                 &[], 
                 "Contract", 
                 None
@@ -147,13 +231,76 @@ pub mod tests {
 
     #[test]
     fn game() {
-        let (addr, mut app) = init_app();
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (cw20_addr, game_addr, mut app) = init_app(
+            player1_addr.clone(),
+            player2_addr.clone()
+        );
+
+        // start game
+        let response = app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
+
+        let wasm = response
+            .events.iter()
+            .find(|ev| ev.ty == "wasm")
+            .unwrap();
+        assert_eq!(
+            wasm.attributes
+                .iter()
+                .find(|attr| attr.key == "action")
+                .unwrap()
+                .value,
+            "start_game"
+        );
+        assert_eq!(
+            Uint128::from_str(&wasm.attributes
+                .iter()
+                .find(|attr| attr.key == "stake")
+                .unwrap()
+                .value 
+            ).unwrap(),
+            Uint128::new(1000)
+        );
+
+        let contract_balance: BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance { 
+                    address: game_addr.to_string() 
+                } 
+        ).unwrap();
+        assert_eq!(contract_balance.balance, Uint128::new(2000));
+
+        let player1_balance: BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: player1_addr.clone().to_string(),
+                },
+        ).unwrap();
+        assert_eq!(player1_balance.balance, Uint128::new(1000000 - 1000));
+
+        let player1_balance: BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: player2_addr.clone().to_string(),
+                },
+        ).unwrap();
+        assert_eq!(player1_balance.balance, Uint128::new(1000000 - 1000));
 
         // player1's turn
         let response = app
             .execute_contract(
                 "player1".into_addr(),
-                addr.clone(),
+                game_addr.clone(),
                 &ExecuteMsg::Play { field: (1, 0) },
                 &[]
             )
@@ -191,7 +338,7 @@ pub mod tests {
         let response = app
             .execute_contract(
                 "player2".into_addr(),
-                addr.clone(),
+                game_addr.clone(),
                 &ExecuteMsg::Play { field: (1, 1) },
                 &[]
             )
@@ -210,6 +357,52 @@ pub mod tests {
             "play"
         );
 
+        let wasm = response
+            .events.iter()
+            .find(|ev| ev.ty == "wasm")
+            .unwrap();
+        assert_eq!(
+            wasm.attributes
+                .iter()
+                .find(|attr| attr.key == "winner")
+                .unwrap()
+                .value,
+            player2_addr.clone().to_string()
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "payout")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(1900)
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "fee_retained")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(100)
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "minted_reward")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(19)
+        );
+
         let game_won: Vec<_> = response
             .events
             .iter()
@@ -225,10 +418,39 @@ pub mod tests {
             stringify!((1, 1))
         );
 
+        let contract_balance: cw20::BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: game_addr.to_string(),
+            }
+        ).unwrap();
+        assert_eq!(contract_balance.balance, Uint128::new(100));
+
+        let winner_balance: cw20::BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: player2_addr.to_string(),
+        },
+        )
+        .unwrap();
+
+        assert_eq!(winner_balance.balance, Uint128::new(1_000_000 - 1_000 + 1919));
+
+        let token_info: cw20::TokenInfoResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::TokenInfo {},
+            )
+        .unwrap();
+
+        assert_eq!(token_info.total_supply, Uint128::new(2_000_000 + 19));
+
         let err = app
             .execute_contract(
                 "player1".into_addr(),
-                addr.clone(),
+                game_addr.clone(),
                 &ExecuteMsg::Play { field: (1, 0) },
                 &[]
             )
@@ -240,12 +462,14 @@ pub mod tests {
 
     #[test]
     fn should_throw_wrong_turn_error() {
-        let (addr, mut app) = init_app();
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(player1_addr, player2_addr);
 
         let err = app
             .execute_contract(
                 "player2".into_addr(),
-                addr.clone(),
+                game_addr.clone(),
                 &ExecuteMsg::Play { field: (1, 0) },
                 &[]
             )

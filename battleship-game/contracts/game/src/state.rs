@@ -37,5 +37,5 @@ pub const TURN: Item<Addr> = Item::new("turn");
 pub const FINISHED: Item<bool> = Item::new("finished");
 
 pub const MIN_STAKE: u128 = 50u128;
-pub const REWARD_PERCENTAGE: u128 = 10u128;
-pub const FEE_PERCENTAGE: u128 = 50u128;
+pub const REWARD_PERCENTAGE: u128 = 1u128;
+pub const FEE_PERCENTAGE: u128 = 5u128;
