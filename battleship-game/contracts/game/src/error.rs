@@ -39,6 +39,9 @@ pub enum ContractError {
     #[error("Overflow occurred during math operation.")]
     Overflow {},
 
+    #[error("Turn not expired.")]
+    TurnNotExpired {},
+
 }
 
 // impl From<OverflowError> for ContractError {

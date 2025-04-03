@@ -33,6 +33,7 @@ pub enum QueryMsg {
 pub enum ExecuteMsg {
     StartGame {},
     Play {field: (usize, usize)},
+    TimeoutWin {},
 }
 
 #[cw_serde]

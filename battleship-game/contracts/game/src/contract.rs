@@ -88,7 +88,8 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::StartGame {} => execute::start_game(deps, env, info),
-        ExecuteMsg::Play {field} => execute::play(deps, info, field)
+        ExecuteMsg::Play {field} => execute::play(deps, env, info, field),
+        ExecuteMsg::TimeoutWin {} => execute::timeout_win(deps, env, info)
     }
 }
 
@@ -115,7 +116,7 @@ mod execute {
     use cosmwasm_std::{Addr, Event, Order};
     use cw20::Cw20ExecuteMsg;
 
-    use crate::state::{FEE_PERCENTAGE, REWARD_PERCENTAGE};
+    use crate::state::{FEE_PERCENTAGE, LAST_TURN_TIME, REWARD_PERCENTAGE, TURN_DURATION};
 
     use super::*;
 
@@ -160,6 +161,7 @@ mod execute {
         }
 
         STARTED.save(deps.storage, &true)?;
+        LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
 
         Ok(Response::new()
             .add_attribute("action", "start_game")
@@ -171,6 +173,7 @@ mod execute {
 
     pub fn play(
         deps: DepsMut,
+        env: Env,
         info: MessageInfo,
         field: (usize, usize)
     ) -> Result<Response, ContractError> {
@@ -207,6 +210,7 @@ mod execute {
             return Err(ContractError::AlreadySunk {});
         }
 
+        LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
         let oponent_board = &oponent.board.fields;
         if oponent_board[field.0][field.1] {
             let oponent = PLAYERS.update::<_, ContractError>(deps.storage, oponent.address.clone(), |player| {
@@ -266,6 +270,67 @@ mod execute {
                 .add_event(Event::new("ship_missed").add_attribute("missed", format!("{:?}", field)))
         )
 
+    }
+
+    pub fn timeout_win(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo
+    ) -> Result<Response, ContractError> {
+        if !STARTED.load(deps.storage)? {
+            return Err(ContractError::GameNotStarted {});
+        }
+
+        if FINISHED.load(deps.storage)? {
+            return Err(ContractError::GameFinished {});
+        }
+
+        let player = PLAYERS.load(deps.storage, info.sender)?;
+        let oponnent_address = TURN.load(deps.storage)?;
+
+        if player.address == oponnent_address {
+            return Err(ContractError::Unauthorized {  })
+        }
+
+        let now = env.block.time.seconds();
+        if now <= LAST_TURN_TIME.load(deps.storage)? + TURN_DURATION {
+            return Err(ContractError::TurnNotExpired {  });
+        }
+
+        FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
+
+        let oponent = PLAYERS.load(deps.storage, oponnent_address)?;
+        let total_amount = player.stake + oponent.stake;
+        let fee = total_amount.multiply_ratio(FEE_PERCENTAGE, 100u128);
+        let payout = total_amount.checked_sub(fee)
+            .map_err(|_| ContractError::Overflow {})?;
+        let token_address = TOKEN_ADDRESS.load(deps.storage)?;
+
+        //transfer funds to winner
+        let transfer_msg = transfer(
+            player.address.clone(), 
+            payout, 
+            token_address.clone()
+        )?;
+
+        // mint reword for winner
+        let reward = payout.multiply_ratio(REWARD_PERCENTAGE, 100u128);
+        let mint_msg = mint(
+            player.address.clone(), 
+            reward, 
+            token_address
+        )?;
+
+        return Ok(Response::new()
+            .add_attribute("action", "timeout_check")
+            .add_attribute("winner", player.address.to_string())
+            .add_attribute("payout", payout.to_string())
+            .add_attribute("fee_retained", fee.to_string())
+            .add_event(Event::new("game_won").add_attribute("sank", format!("{:?}", (-1, -1))))
+            .add_message(transfer_msg)
+            .add_attribute("minted_reward", reward.to_string())
+            .add_message(mint_msg)
+        );
     }
 
     pub fn transfer(

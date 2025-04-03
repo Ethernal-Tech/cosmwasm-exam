@@ -33,9 +33,12 @@ pub const PLAYERS: Map<Addr, Player> = Map::new("players");
 // current turn
 pub const TURN: Item<Addr> = Item::new("turn");
 
+pub const LAST_TURN_TIME: Item<u64> = Item::new("last_turn_time");
+
 // game finished
 pub const FINISHED: Item<bool> = Item::new("finished");
 
 pub const MIN_STAKE: u128 = 50u128;
 pub const REWARD_PERCENTAGE: u128 = 1u128;
 pub const FEE_PERCENTAGE: u128 = 5u128;
+pub const TURN_DURATION: u64 = 60u64;

@@ -567,4 +567,174 @@ pub mod tests {
         assert_eq!(ContractError::GameNotStarted {  }, err.downcast().unwrap())
     }
 
+    #[test]
+    fn timeout_win() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (cw20_addr, game_addr, mut app) = init_app(
+            player1_addr.clone(),
+            player2_addr.clone()
+        );
+
+        // start game
+        app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
+
+        app.update_block(|b| b.time = b.time.plus_seconds(1000));
+
+        let response = app.execute_contract(
+            player2_addr.clone(),
+            game_addr.clone(),
+            &ExecuteMsg::TimeoutWin {},
+            &[]
+        ).unwrap();
+
+        let wasm = response
+            .events.iter()
+            .find(|ev| ev.ty == "wasm")
+            .unwrap();
+        assert_eq!(
+            wasm.attributes
+                .iter()
+                .find(|attr| attr.key == "action")
+                .unwrap()
+                .value,
+            "timeout_check"
+        );
+
+        let wasm = response
+            .events.iter()
+            .find(|ev| ev.ty == "wasm")
+            .unwrap();
+        assert_eq!(
+            wasm.attributes
+                .iter()
+                .find(|attr| attr.key == "winner")
+                .unwrap()
+                .value,
+            player2_addr.clone().to_string()
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "payout")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(1900)
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "fee_retained")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(100)
+        );
+
+        assert_eq!(
+            Uint128::from_str(
+                &wasm.attributes
+                .iter()
+                .find(|a| a.key == "minted_reward")
+                .unwrap()
+                .value
+            ).unwrap(),
+            Uint128::new(19)
+        );
+
+        let game_won: Vec<_> = response
+            .events
+            .iter()
+            .filter(|ev| ev.ty == "wasm-game_won")
+            .collect();
+        assert_eq!(
+            game_won[0]
+                .attributes
+                .iter()
+                .find(|attr| attr.key == "sank")
+                .unwrap()
+                .value,
+            stringify!((-1, -1))
+        );
+
+        let contract_balance: cw20::BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: game_addr.to_string(),
+            }
+        ).unwrap();
+        assert_eq!(contract_balance.balance, Uint128::new(100));
+
+        let winner_balance: cw20::BalanceResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::Balance {
+                    address: player2_addr.to_string(),
+        },
+        )
+        .unwrap();
+
+        assert_eq!(winner_balance.balance, Uint128::new(1_000_000 - 1_000 + 1919));
+
+        let token_info: cw20::TokenInfoResponse = app.wrap()
+            .query_wasm_smart(
+                cw20_addr.clone(),
+                &Cw20QueryMsg::TokenInfo {},
+            )
+        .unwrap();
+
+        assert_eq!(token_info.total_supply, Uint128::new(2_000_000 + 19));
+
+        let err = app
+            .execute_contract(
+                "player1".into_addr(),
+                game_addr.clone(),
+                &ExecuteMsg::Play { field: (1, 0) },
+                &[]
+            )
+            .unwrap_err();
+
+        assert_eq!(ContractError::GameFinished {  }, err.downcast().unwrap())
+
+    }
+
+    #[test]
+    fn should_throw_turn_not_expired() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(
+            player1_addr.clone(),
+            player2_addr.clone()
+        );
+
+        app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
+
+        let err = app.execute_contract(
+            player2_addr.clone(),
+            game_addr.clone(),
+            &ExecuteMsg::TimeoutWin {},
+            &[]
+        ).unwrap_err();
+
+        assert_eq!(ContractError::TurnNotExpired {  }, err.downcast().unwrap())
+    }
+
 }
