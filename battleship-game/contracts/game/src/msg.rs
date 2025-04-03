@@ -24,6 +24,9 @@ pub enum QueryMsg {
     GetPlayers {},
     GetTurn {},
     GetShips {},
+    GetStarted {},
+    GetFinished {},
+    GetTokenAddress {},
 }
 
 #[cw_serde]
@@ -48,6 +51,13 @@ pub struct ShipsResponse {
 }
 
 #[cw_serde]
-pub struct TurnResponse {
-    pub turn: Addr
+pub struct AddressResponse {
+    pub address: Addr
 }
+
+#[cw_serde]
+pub struct BoolResponse {
+    pub value: bool
+}
+
+

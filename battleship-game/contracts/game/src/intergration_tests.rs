@@ -7,10 +7,11 @@ pub mod tests {
     use cw_multi_test::{App, ContractWrapper, Executor, IntoAddr};
     use cw20_base::contract::{instantiate as cw20_instantiate, execute as cw20_execute, query as cw20_query};
     use cw20_base::msg::{InstantiateMsg as Cw20InstantiateMsg, ExecuteMsg as Cw20ExecuteMsg};
+    use crate::msg::BoolResponse;
     use crate::{
         contract::{execute, instantiate, query}, 
         msg::{
-            AdminResponse, ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg, ShipsResponse, TurnResponse
+            AdminResponse, ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg, ShipsResponse, AddressResponse
         }, state::Player, ContractError
     };
 
@@ -142,7 +143,7 @@ pub mod tests {
     fn instantiation() {
         let player1_addr = "player1".into_addr();
         let player2_addr = "player2".into_addr();
-        let (_, address, mut app) = init_app(player1_addr, player2_addr);
+        let (cw20_address, address, app) = init_app(player1_addr, player2_addr);
 
         let response: AdminResponse = app
             .wrap()
@@ -158,12 +159,33 @@ pub mod tests {
 
         assert_eq!(response.ships, 1);
 
-        let response: TurnResponse = app
+        let response: AddressResponse = app
             .wrap()
             .query_wasm_smart(address.clone(), &QueryMsg::GetTurn {  })
             .unwrap();
 
-        assert_eq!(response.turn, "player1".into_addr());
+        assert_eq!(response.address, "player1".into_addr());
+
+        let response: AddressResponse = app
+            .wrap()
+            .query_wasm_smart(address.clone(), &QueryMsg::GetTokenAddress {  })
+            .unwrap();
+
+        assert_eq!(response.address, cw20_address);
+
+        let response: BoolResponse = app
+            .wrap()
+            .query_wasm_smart(address.clone(), &QueryMsg::GetStarted {  })
+            .unwrap();
+
+        assert_eq!(response.value, false);
+
+        let response: BoolResponse = app
+            .wrap()
+            .query_wasm_smart(address.clone(), &QueryMsg::GetFinished {  })
+            .unwrap();
+
+        assert_eq!(response.value, false);
 
         let response: Vec<Player> = app
             .wrap()
@@ -464,7 +486,15 @@ pub mod tests {
     fn should_throw_wrong_turn_error() {
         let player1_addr = "player1".into_addr();
         let player2_addr = "player2".into_addr();
-        let (_, game_addr, mut app) = init_app(player1_addr, player2_addr);
+        let (_, game_addr, mut app) = init_app(player1_addr.clone(), player2_addr.clone());
+
+        let _ = app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
 
         let err = app
             .execute_contract(
@@ -476,6 +506,65 @@ pub mod tests {
             .unwrap_err();
 
         assert_eq!(ContractError::WrongTurn {  }, err.downcast().unwrap())
+    }
+
+    #[test]
+    fn should_throw_game_started_error() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(player1_addr.clone(), player2_addr.clone());
+
+        let _ = app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
+
+        let err = app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap_err();
+        assert_eq!(ContractError::GameStarted {  }, err.downcast().unwrap())
+    }
+
+    #[test]
+    fn should_throw_unauthorized_error() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(player1_addr.clone(), player2_addr.clone());
+
+        let err = app
+            .execute_contract(
+                "attacker".into_addr(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap_err();
+
+        assert_eq!(ContractError::Unauthorized {  }, err.downcast().unwrap())
+    }
+
+    #[test]
+    fn should_throw_game_not_started_error() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(player1_addr.clone(), player2_addr.clone());
+
+        let err = app
+            .execute_contract(
+                "player2".into_addr(),
+                game_addr.clone(),
+                &ExecuteMsg::Play { field: (1, 0) },
+                &[]
+            )
+            .unwrap_err();
+
+        assert_eq!(ContractError::GameNotStarted {  }, err.downcast().unwrap())
     }
 
 }

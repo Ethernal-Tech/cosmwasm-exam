@@ -102,7 +102,10 @@ pub fn query(
         QueryMsg::GetAdmin {} => to_json_binary(&query::get_admin(deps)?),
         QueryMsg::GetPlayers {} => to_json_binary(&query::get_players(deps)?),
         QueryMsg::GetShips {} => to_json_binary(&query::get_ships(deps)?),
-        QueryMsg::GetTurn {} => to_json_binary(&query::get_turn(deps)?)
+        QueryMsg::GetTurn {} => to_json_binary(&query::get_turn(deps)?),
+        QueryMsg::GetStarted {} => to_json_binary(&query::get_started(deps)?),
+        QueryMsg::GetFinished {} => to_json_binary(&query::get_finished(deps)?),
+        QueryMsg::GetTokenAddress {} => to_json_binary(&query::get_token_address(deps)?),
     }
 }
 
@@ -147,7 +150,6 @@ mod execute {
                 recipient: env.contract.address.to_string(),
                 amount: player.stake
             };
-            // potencijalni problem zbog to_json_binary
             messages.push(
                 cosmwasm_std::WasmMsg::Execute {
                     contract_addr: token_addr.to_string(),
@@ -200,8 +202,8 @@ mod execute {
 
         let oponent = oponent?;
 
-        let oponent_sinked = &oponent.board.sank;
-        if oponent_sinked.contains(&field) {
+        let oponent_sunk = &oponent.board.sank;
+        if oponent_sunk.contains(&field) {
             return Err(ContractError::AlreadySunk {});
         }
 
@@ -303,7 +305,7 @@ mod execute {
 mod query {
     use cosmwasm_std::Order;
 
-    use crate::{msg::{AdminResponse, ShipsResponse, TurnResponse}, state::TURN};
+    use crate::{msg::{AddressResponse, AdminResponse, BoolResponse, ShipsResponse}, state::TURN};
 
     use super::*;
 
@@ -327,8 +329,32 @@ mod query {
         Ok(ShipsResponse { ships: ships? })
     }
 
-    pub fn get_turn(deps: Deps) -> StdResult<TurnResponse> {
+    pub fn get_turn(deps: Deps) -> StdResult<AddressResponse> {
         let turn = TURN.load(deps.storage);
-        Ok(TurnResponse { turn: turn? })
+        Ok(AddressResponse { address: turn? })
+    }
+
+    pub fn get_started(deps: Deps) -> StdResult<BoolResponse> {
+        Ok(
+            BoolResponse { 
+                value: STARTED.load(deps.storage)?
+            }
+        )
+    }
+
+    pub fn get_finished(deps: Deps) -> StdResult<BoolResponse> {
+        Ok(
+            BoolResponse { 
+                value: FINISHED.load(deps.storage)?
+            }
+        )
+    }
+
+    pub fn get_token_address(deps: Deps) -> StdResult<AddressResponse> {
+        Ok(
+            AddressResponse { 
+                address: TOKEN_ADDRESS.load(deps.storage)?
+            }
+        )
     }
 }
