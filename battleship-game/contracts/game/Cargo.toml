@@ -1,0 +1,25 @@
+[package]
+name = "battleship-game"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw-storage-plus = { workspace = true }
+cw-utils = { workspace = true }
+cw2 = { workspace = true }
+cw20 = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+schemars = { workspace = true }
+
+[dev-dependencies]
+cw-multi-test = "2.3.2"
+cw20-base = { path = "../cw20-base", features = ["library"] }
