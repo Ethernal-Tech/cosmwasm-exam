@@ -533,6 +533,37 @@ pub mod tests {
     }
 
     #[test]
+    fn should_throw_turn_expired_error() {
+        let player1_addr = "player1".into_addr();
+        let player2_addr = "player2".into_addr();
+        let (_, game_addr, mut app) = init_app(
+            player1_addr.clone(),
+            player2_addr.clone()
+        );
+
+        // start game
+        app
+            .execute_contract(
+                player1_addr.clone(), 
+                game_addr.clone(), 
+                &ExecuteMsg::StartGame {}, 
+                &[]
+        ).unwrap();
+
+        app.update_block(|b| b.time = b.time.plus_seconds(1000));
+
+        let err = app
+            .execute_contract(
+                "player1".into_addr(),
+                game_addr.clone(),
+                &ExecuteMsg::Play { field: (1, 0) },
+                &[]
+            )
+            .unwrap_err();
+        assert_eq!(ContractError::TurnExpired {  }, err.downcast().unwrap());
+    }
+
+    #[test]
     fn should_throw_unauthorized_error() {
         let player1_addr = "player1".into_addr();
         let player2_addr = "player2".into_addr();

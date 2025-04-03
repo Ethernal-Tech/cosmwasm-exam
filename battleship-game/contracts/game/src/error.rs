@@ -42,6 +42,9 @@ pub enum ContractError {
     #[error("Turn not expired.")]
     TurnNotExpired {},
 
+    #[error("Turn expired.")]
+    TurnExpired {},
+
 }
 
 // impl From<OverflowError> for ContractError {

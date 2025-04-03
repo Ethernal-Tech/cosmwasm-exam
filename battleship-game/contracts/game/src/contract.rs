@@ -185,6 +185,10 @@ mod execute {
             return Err(ContractError::GameFinished {});
         }
 
+        if env.block.time.seconds() > LAST_TURN_TIME.load(deps.storage)? + TURN_DURATION {
+            return Err(ContractError::TurnExpired {  });
+        }
+
         let player = info.sender;
         if player != TURN.load(deps.storage)? {
             return Err(ContractError::WrongTurn {  })
