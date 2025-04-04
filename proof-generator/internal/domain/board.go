@@ -1,11 +1,11 @@
 package domain
 
 type Board struct {
-	fields [][]bool
+	Fields [][]bool
 }
 
 func NewBoard(fields [][]bool) *Board {
 	return &Board{
-		fields: fields,
+		Fields: fields,
 	}
 }

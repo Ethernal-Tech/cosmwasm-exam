@@ -16,10 +16,10 @@ func main() {
 
 	fmt.Println(generator.MerkleTree)
 
-	data, proof := generator.MerkleTree.GenerateProof(0)
+	data, proof := generator.GenerateProof(domain.Field{Row: 0, Column: 0})
 
 	fmt.Println(data)
 	fmt.Println(proof)
 
-	fmt.Println(generator.MerkleTree.VerifyProof(data, proof))
+	fmt.Println(generator.VerifyProof(domain.Field{Row: 0, Column: 0}, proof))
 }
