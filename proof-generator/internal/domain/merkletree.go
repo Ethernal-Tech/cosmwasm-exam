@@ -7,9 +7,17 @@ import (
 	"strings"
 )
 
+type Node struct {
+	parent *Node;
+	left *Node
+	right *Node
+	data string;
+}
+
 type MerkleTree struct {
 	data []string;
-	Nodes []string;
+	Leaves []*Node;
+	Root *Node;
 }
 
 func NewMerkleTree(data []string) *MerkleTree {
@@ -26,27 +34,49 @@ func NewMerkleTree(data []string) *MerkleTree {
 func (merkleTree *MerkleTree) generateLeaves() {
 	for _, item := range merkleTree.data {
 		hash := hash(item)
-		merkleTree.Nodes = append(merkleTree.Nodes, hash)
+		node := &Node {
+			parent: nil,
+			data: hash,
+		}
+		merkleTree.Leaves = append(merkleTree.Leaves, node)
 	}
-	if len(merkleTree.Nodes) % 2 != 0 {
-		merkleTree.Nodes = append(merkleTree.Nodes, hash("0"))
+	if len(merkleTree.Leaves) % 2 != 0 {
+		merkleTree.Leaves = append(merkleTree.Leaves, merkleTree.Leaves[len(merkleTree.Leaves)-1])
 	}
 }
 
 func (merkleTree *MerkleTree) generateTree() {
-	currentLevel := merkleTree.Nodes
-	for len(currentLevel) > 1 {
-		var nextLevel []string
+	merkleTree.Root = generateTree(merkleTree.Leaves)
+}
 
-		for i := 0; i < len(currentLevel) - 1; i += 2 {
-			combined := currentLevel[i] + currentLevel[i+1]
-			hash := hash(combined)
-			nextLevel = append(nextLevel, hash)
-		}
-
-		merkleTree.Nodes = append(merkleTree.Nodes, nextLevel...)
-		currentLevel = nextLevel
+func generateTree(level []*Node) *Node {
+	if len(level) == 1 {
+		return level[0];
 	}
+
+	if len(level) % 2 != 0 {
+		level = append(level, level[len(level)-1])
+	}
+
+	var nextLevel []*Node
+
+	for i := 0; i < len(level) - 1; i += 2 {
+		combined := level[i].data + level[i+1].data
+		hash := hash(combined)
+		nextLevel = append(
+			nextLevel, 
+			&Node {
+				parent: nil,
+				data: hash,
+			},
+		)
+		level[i].parent = nextLevel[len(nextLevel) - 1]
+		level[i+1].parent = nextLevel[len(nextLevel) - 1]
+		level[i].right = level[i+1]
+		level[i+1].left = level[i]
+	}
+
+	return generateTree(nextLevel)
 }
 
 func hash(item string) string {
@@ -55,28 +85,51 @@ func hash(item string) string {
 }
 
 func (merkleTree *MerkleTree) String() string {
-	if len(merkleTree.Nodes) == 0 {
-		return "Empty Merkle Tree"
+	if len(merkleTree.Leaves) == 0 {
+		return "Merkle Tree is empty"
 	}
 
-	var result string
-	levelSize := len(merkleTree.data)
-	start := 0
+	var levels [][]string
+	currentLevel := append([]*Node{}, merkleTree.Leaves...)
 
-	for levelSize > 0 {
-		end := start + levelSize
-		if end > len(merkleTree.Nodes) {
-			end = len(merkleTree.Nodes)
+	for {
+		var hashes []string
+		var nextLevel []*Node
+
+		for _, node := range currentLevel {
+			hashes = append(hashes, node.data)
+			if node.parent != nil {
+				nextLevel = appendIfMissing(nextLevel, node.parent)
+			}
 		}
-		
-		level := merkleTree.Nodes[start:end]
-		result = fmt.Sprintf("%s\n%s", strings.Join(level, " "), result)
 
-		start = end
-		levelSize = levelSize / 2
+		levels = append(levels, hashes)
+
+		if len(nextLevel) == 0 {
+			break
+		}
+
+		currentLevel = nextLevel
 	}
 
-	return result
+	var sb strings.Builder
+	for i := len(levels) - 1; i >= 0; i-- {
+		sb.WriteString(fmt.Sprintf("Level %d:\n", len(levels)-1-i))
+		for _, hash := range levels[i] {
+			sb.WriteString(fmt.Sprintf("  %s\n", hash))
+		}
+	}
+
+	return sb.String()
+}
+
+func appendIfMissing(nodes []*Node, node *Node) []*Node {
+	for _, n := range nodes {
+		if n == node {
+			return nodes
+		}
+	}
+	return append(nodes, node)
 }
 
 
