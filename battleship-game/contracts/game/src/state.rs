@@ -16,7 +16,7 @@ pub const SHIPS: Item<usize> = Item::new("ships");
 
 #[cw_serde]
 pub struct Board {
-    pub fields: Vec<Vec<bool>>,
+    pub fields: String,
     pub sank: Vec<(usize, usize)>,
 }
 

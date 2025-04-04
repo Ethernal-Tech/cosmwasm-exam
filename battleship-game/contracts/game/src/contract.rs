@@ -44,9 +44,10 @@ pub fn instantiate(
         let address = deps.api.addr_validate(&player.address)?;
         let stake = player.stake;
         
-        if !validate_board(&player.board, ships) {
-            return Err(ContractError::InvalidBoard {});
-        }
+        // This validation will be done on the other side
+        // if !validate_board(&player.board, ships) {
+        //     return Err(ContractError::InvalidBoard {});
+        // }
 
         let board = Board {
             fields: player.board,
@@ -87,9 +88,12 @@ pub fn execute(
     msg: ExecuteMsg
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::StartGame {} => execute::start_game(deps, env, info),
-        ExecuteMsg::Play {field} => execute::play(deps, env, info, field),
-        ExecuteMsg::TimeoutWin {} => execute::timeout_win(deps, env, info)
+        ExecuteMsg::StartGame {} => 
+            execute::start_game(deps, env, info),
+        ExecuteMsg::Play {field, value, proof} => 
+            execute::play(deps, env, info, field, value, proof),
+        ExecuteMsg::TimeoutWin {} => 
+            execute::timeout_win(deps, env, info)
     }
 }
 
@@ -115,8 +119,10 @@ mod execute {
 
     use cosmwasm_std::{Addr, Event, Order};
     use cw20::Cw20ExecuteMsg;
+    use sha2::{Digest, Sha256};
+    use hex;
 
-    use crate::state::{FEE_PERCENTAGE, LAST_TURN_TIME, REWARD_PERCENTAGE, TURN_DURATION};
+    use crate::{msg::ProofStep, state::{FEE_PERCENTAGE, LAST_TURN_TIME, REWARD_PERCENTAGE, TURN_DURATION}};
 
     use super::*;
 
@@ -175,7 +181,9 @@ mod execute {
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        field: (usize, usize)
+        field: (usize, usize),
+        field_value: bool,
+        proof: Vec<ProofStep>
     ) -> Result<Response, ContractError> {
         if !STARTED.load(deps.storage)? {
             return Err(ContractError::GameNotStarted {});
@@ -209,19 +217,27 @@ mod execute {
 
         let opponent = opponent?;
 
+        if !verify_proof(field_value, proof, &opponent.board.fields) {
+            return Err(ContractError::InvalidProof {  });
+        }
+
         let opponent_sunk = &opponent.board.sank;
         if opponent_sunk.contains(&field) {
             return Err(ContractError::AlreadySunk {});
         }
 
         LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
-        let opponent_board = &opponent.board.fields;
-        if opponent_board[field.0][field.1] {
-            let opponent = PLAYERS.update::<_, ContractError>(deps.storage, opponent.address.clone(), |player| {
-                let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
-                player.board.sank.push(field);
-                Ok(player)
-            })?;
+        if field_value {
+            let opponent = PLAYERS
+                .update::<_, ContractError>(
+                    deps.storage, 
+                    opponent.address.clone(), 
+                    |player| {
+                        let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
+                        player.board.sank.push(field);
+                        Ok(player)
+                    }
+                )?;
 
             if opponent.board.sank.len() == SHIPS.load(deps.storage)? {
                 FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
@@ -274,6 +290,29 @@ mod execute {
                 .add_event(Event::new("ship_missed").add_attribute("missed", format!("{:?}", field)))
         )
 
+    }
+
+    pub fn verify_proof(value: bool, proof: Vec<ProofStep>, merkle_root: &str) -> bool {
+        let mut current_hash = hash(value.to_string());
+        println!("{}", value);
+
+        for step in proof {
+            println!("{}", current_hash);
+            if step.is_left {
+                current_hash = hash(step.hash + &current_hash);
+                continue;
+            }
+            current_hash = hash(current_hash + &step.hash);
+        }
+
+        return current_hash == merkle_root;
+    }
+
+    pub fn hash(item: String) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(item.as_bytes());
+        let result = hasher.finalize();
+        hex::encode(result)
     }
 
     pub fn timeout_win(

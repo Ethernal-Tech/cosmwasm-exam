@@ -7,7 +7,7 @@ use crate::state::Player;
 pub struct PlayerInstantiate {
     pub address: String,
     pub stake: Uint128,
-    pub board: Vec<Vec<bool>>,
+    pub board: String,
 }
 
 #[cw_serde]
@@ -30,9 +30,19 @@ pub enum QueryMsg {
 }
 
 #[cw_serde]
+pub struct ProofStep {
+    pub hash: String,
+    pub is_left: bool,
+}
+
+#[cw_serde]
 pub enum ExecuteMsg {
     StartGame {},
-    Play {field: (usize, usize)},
+    Play {
+        field: (usize, usize),
+        value: bool,
+        proof: Vec<ProofStep>
+    },
     TimeoutWin {},
 }
 

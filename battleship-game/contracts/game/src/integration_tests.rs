@@ -7,7 +7,7 @@ pub mod tests {
     use cw_multi_test::{App, ContractWrapper, Executor, IntoAddr};
     use cw20_base::contract::{instantiate as cw20_instantiate, execute as cw20_execute, query as cw20_query};
     use cw20_base::msg::{InstantiateMsg as Cw20InstantiateMsg, ExecuteMsg as Cw20ExecuteMsg};
-    use crate::msg::BoolResponse;
+    use crate::msg::{BoolResponse, ProofStep};
     use crate::{
         contract::{execute, instantiate, query}, 
         msg::{
@@ -24,20 +24,12 @@ pub mod tests {
                 PlayerInstantiate {
                     address: "player1".into_addr().to_string(),
                     stake: Uint128::new(1000),
-                    board: vec![
-                        vec![false, false, false],
-                        vec![false, true, false],
-                        vec![false, false, false],
-                    ],
+                    board: "372ecd2044c797715c6d02c9f5b0fd2594172620a632e8a7dd3f10bfa8f2df56".to_owned(),
                 },
                 PlayerInstantiate {
                     address: "player2".into_addr().to_string(),
                     stake: Uint128::new(1000),
-                    board: vec![
-                        vec![false, true, false],
-                        vec![false, false, false],
-                        vec![false, false, false],
-                    ],
+                    board: "ee5fd4795e374a9e78f447867419b5ea98e662383c0ee88622e00cc7f710165c".to_owned(),
                 },
             ],
         }
@@ -194,20 +186,12 @@ pub mod tests {
 
         assert_eq!(response[1].address, "player1".into_addr());
         assert_eq!(response[1].stake, Uint128::new(1000));
-        assert_eq!(response[1].board.fields, vec![
-            vec![false, false, false],
-            vec![false, true, false],
-            vec![false, false, false],
-        ]);
+        assert_eq!(response[1].board.fields, "372ecd2044c797715c6d02c9f5b0fd2594172620a632e8a7dd3f10bfa8f2df56".to_owned(),);
         assert_eq!(response[1].board.sank, vec![]);
 
         assert_eq!(response[0].address, "player2".into_addr());
         assert_eq!(response[0].stake, Uint128::new(1000));
-        assert_eq!(response[0].board.fields, vec![
-            vec![false, true, false],
-            vec![false, false, false],
-            vec![false, false, false],
-        ]);
+        assert_eq!(response[0].board.fields, "ee5fd4795e374a9e78f447867419b5ea98e662383c0ee88622e00cc7f710165c".to_owned());
         assert_eq!(response[0].board.sank, vec![]);
     }
 
@@ -231,25 +215,25 @@ pub mod tests {
         assert_eq!(ContractError::InvalidShips {  }, err.downcast().unwrap())
     }
 
-    #[test]
-    fn should_throw_invalid_board_error() {
-        let mut app = App::default();
+    // #[test]
+    // fn should_throw_invalid_board_error() {
+    //     let mut app = App::default();
 
-        let code = ContractWrapper::new(execute, instantiate, query);
-        let code_id = app.store_code(Box::new(code));
+    //     let code = ContractWrapper::new(execute, instantiate, query);
+    //     let code_id = app.store_code(Box::new(code));
 
-        let err = app
-            .instantiate_contract(
-                code_id, 
-                "owner".into_addr(),
-                &mock_instantiate_msg(3, "token".into_addr()), 
-                &[], 
-                "Contract", 
-                None
-            ).unwrap_err();
+    //     let err = app
+    //         .instantiate_contract(
+    //             code_id, 
+    //             "owner".into_addr(),
+    //             &mock_instantiate_msg(3, "token".into_addr()), 
+    //             &[], 
+    //             "Contract", 
+    //             None
+    //         ).unwrap_err();
 
-        assert_eq!(ContractError::InvalidBoard {  }, err.downcast().unwrap())
-    }
+    //     assert_eq!(ContractError::InvalidBoard {  }, err.downcast().unwrap())
+    // }
 
     #[test]
     fn game() {
@@ -323,7 +307,28 @@ pub mod tests {
             .execute_contract(
                 "player1".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play { 
+                    field: (1, 0),
+                    value: false,
+                    proof: vec![
+                        ProofStep {
+                            hash: "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa".to_owned(),
+                            is_left: true
+                        },
+                        ProofStep {
+                            hash: "b39595dabdf67f2d2b1c22e6690c8500c89ccb9d817f1cce4b47337910cbe2cb".to_owned(),
+                            is_left: true
+                        },
+                        ProofStep {
+                            hash: "9a74c4cb6669420048ea661a3b8e501ca5c10c2f2680a41acc2128422c1ff6b6".to_owned(),
+                            is_left: false
+                        },
+                        ProofStep {
+                            hash: "2e176322075537fd763b4405a4392854d0f67b079f814bbe9d9683ca371343e9".to_owned(),
+                            is_left: false
+                        },
+                    ] 
+                },
                 &[]
             )
             .unwrap();
@@ -361,7 +366,28 @@ pub mod tests {
             .execute_contract(
                 "player2".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 1) },
+                &ExecuteMsg::Play { 
+                    field: (1, 1),
+                    value: true,
+                    proof: vec![
+                        ProofStep {
+                            hash: "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa".to_owned(),
+                            is_left: false
+                        },
+                        ProofStep {
+                            hash: "33873cc7849b5a36e72508f177d655726b17aa5adeded878804cc402ae1ecbc1".to_owned(),
+                            is_left: false
+                        },
+                        ProofStep {
+                            hash: "9a74c4cb6669420048ea661a3b8e501ca5c10c2f2680a41acc2128422c1ff6b6".to_owned(),
+                            is_left: true
+                        },
+                        ProofStep {
+                            hash: "2e176322075537fd763b4405a4392854d0f67b079f814bbe9d9683ca371343e9".to_owned(),
+                            is_left: false
+                        }
+                    ]
+                },
                 &[]
             )
             .unwrap();
@@ -473,7 +499,11 @@ pub mod tests {
             .execute_contract(
                 "player1".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play {
+                    field: (1, 0),
+                    value: false,
+                    proof: vec![]
+                },
                 &[]
             )
             .unwrap_err();
@@ -488,7 +518,7 @@ pub mod tests {
         let player2_addr = "player2".into_addr();
         let (_, game_addr, mut app) = init_app(player1_addr.clone(), player2_addr.clone());
 
-        let _ = app
+        app
             .execute_contract(
                 player1_addr.clone(), 
                 game_addr.clone(), 
@@ -500,7 +530,11 @@ pub mod tests {
             .execute_contract(
                 "player2".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play {
+                    field: (1, 0),
+                    value: false,
+                    proof: vec![]
+                },
                 &[]
             )
             .unwrap_err();
@@ -556,7 +590,11 @@ pub mod tests {
             .execute_contract(
                 "player1".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play {
+                    field: (1, 0),
+                    value: false,
+                    proof: vec![]
+                },
                 &[]
             )
             .unwrap_err();
@@ -590,7 +628,11 @@ pub mod tests {
             .execute_contract(
                 "player2".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play {
+                    field: (1, 0),
+                    value: false,
+                    proof: vec![]
+                },
                 &[]
             )
             .unwrap_err();
@@ -732,7 +774,11 @@ pub mod tests {
             .execute_contract(
                 "player1".into_addr(),
                 game_addr.clone(),
-                &ExecuteMsg::Play { field: (1, 0) },
+                &ExecuteMsg::Play { 
+                    field: (1, 0),
+                    value: true,
+                    proof: vec![]
+                },
                 &[]
             )
             .unwrap_err();
