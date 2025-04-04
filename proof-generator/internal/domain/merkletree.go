@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
+	"slices"
 )
 
 type Node struct {
@@ -18,6 +19,11 @@ type MerkleTree struct {
 	data []string;
 	Leaves []*Node;
 	Root *Node;
+}
+
+type ProofStep struct {
+	hash string;
+	isLeft bool;
 }
 
 func NewMerkleTree(data []string) *MerkleTree {
@@ -90,7 +96,7 @@ func (merkleTree *MerkleTree) String() string {
 	}
 
 	var levels [][]string
-	currentLevel := append([]*Node{}, merkleTree.Leaves...)
+	currentLevel := slices.Clone(merkleTree.Leaves)
 
 	for {
 		var hashes []string
@@ -124,12 +130,59 @@ func (merkleTree *MerkleTree) String() string {
 }
 
 func appendIfMissing(nodes []*Node, node *Node) []*Node {
-	for _, n := range nodes {
-		if n == node {
+	if slices.Contains(nodes, node) {
 			return nodes
 		}
-	}
 	return append(nodes, node)
+}
+
+func (merkleTree *MerkleTree) GenerateProof(dataIndex int) (string, []ProofStep) {
+	var proof []ProofStep
+
+	dataToProve := merkleTree.data[dataIndex]
+	leaf := merkleTree.Leaves[dataIndex]
+
+	node := leaf
+	for node != nil {
+		
+		if node.left != nil {
+			proof = append(
+				proof, 
+				ProofStep {
+					hash: node.left.data,
+					isLeft: true,
+				},
+			)
+		}
+
+		if node.right != nil {
+			proof = append(
+				proof, 
+				ProofStep {
+					hash: node.right.data,
+					isLeft: false,
+				},
+			)
+		}
+
+		node = node.parent
+	}
+
+	return dataToProve, proof
+}
+
+func (merkleTree *MerkleTree) VerifyProof(data string, proof []ProofStep) bool {
+	currentHash := hash(data)
+
+	for _, step := range proof {
+		if step.isLeft {
+			currentHash = hash(step.hash + currentHash)
+			continue
+		}
+		currentHash = hash(currentHash + step.hash)
+	}
+
+	return currentHash == merkleTree.Root.data
 }
 
 

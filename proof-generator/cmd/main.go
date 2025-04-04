@@ -15,4 +15,11 @@ func main() {
 	generator := domain.NewGenerator(board)
 
 	fmt.Println(generator.MerkleTree)
+
+	data, proof := generator.MerkleTree.GenerateProof(0)
+
+	fmt.Println(data)
+	fmt.Println(proof)
+
+	fmt.Println(generator.MerkleTree.VerifyProof(data, proof))
 }
