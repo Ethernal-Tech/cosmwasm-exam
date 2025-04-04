@@ -195,7 +195,7 @@ mod execute {
         }
         let player = PLAYERS.load(deps.storage, player)?;
 
-        let oponent = PLAYERS
+        let opponent = PLAYERS
             .range(deps.storage, None, None, Order::Ascending)
             .find_map(|item| {
                 let (addr, player_data) = item.ok()?;
@@ -207,26 +207,26 @@ mod execute {
         })
         .ok_or(ContractError::PlayerNotFound {  });
 
-        let oponent = oponent?;
+        let opponent = opponent?;
 
-        let oponent_sunk = &oponent.board.sank;
-        if oponent_sunk.contains(&field) {
+        let opponent_sunk = &opponent.board.sank;
+        if opponent_sunk.contains(&field) {
             return Err(ContractError::AlreadySunk {});
         }
 
         LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
-        let oponent_board = &oponent.board.fields;
-        if oponent_board[field.0][field.1] {
-            let oponent = PLAYERS.update::<_, ContractError>(deps.storage, oponent.address.clone(), |player| {
+        let opponent_board = &opponent.board.fields;
+        if opponent_board[field.0][field.1] {
+            let opponent = PLAYERS.update::<_, ContractError>(deps.storage, opponent.address.clone(), |player| {
                 let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
                 player.board.sank.push(field);
                 Ok(player)
             })?;
 
-            if oponent.board.sank.len() == SHIPS.load(deps.storage)? {
+            if opponent.board.sank.len() == SHIPS.load(deps.storage)? {
                 FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
 
-                let total_amount = player.stake + oponent.stake;
+                let total_amount = player.stake + opponent.stake;
                 let fee = total_amount.multiply_ratio(FEE_PERCENTAGE, 100u128);
                 let payout = total_amount.checked_sub(fee)
                     .map_err(|_| ContractError::Overflow {})?;
@@ -259,7 +259,7 @@ mod execute {
                 );
             }
 
-            TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
+            TURN.update::<_, ContractError>(deps.storage, |_| Ok(opponent.address.clone()))?;
             return Ok(
                 Response::new()
                     .add_attribute("action", "play")
@@ -267,7 +267,7 @@ mod execute {
             );
         }
 
-        TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
+        TURN.update::<_, ContractError>(deps.storage, |_| Ok(opponent.address.clone()))?;
         Ok(
             Response::new()
                 .add_attribute("action", "play")
@@ -290,9 +290,9 @@ mod execute {
         }
 
         let player = PLAYERS.load(deps.storage, info.sender)?;
-        let oponnent_address = TURN.load(deps.storage)?;
+        let opponent_address = TURN.load(deps.storage)?;
 
-        if player.address == oponnent_address {
+        if player.address == opponent_address {
             return Err(ContractError::Unauthorized {  })
         }
 
@@ -303,8 +303,8 @@ mod execute {
 
         FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
 
-        let oponent = PLAYERS.load(deps.storage, oponnent_address)?;
-        let total_amount = player.stake + oponent.stake;
+        let opponent = PLAYERS.load(deps.storage, opponent_address)?;
+        let total_amount = player.stake + opponent.stake;
         let fee = total_amount.multiply_ratio(FEE_PERCENTAGE, 100u128);
         let payout = total_amount.checked_sub(fee)
             .map_err(|_| ContractError::Overflow {})?;
