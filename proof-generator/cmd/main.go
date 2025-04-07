@@ -2,47 +2,39 @@ package main
 
 import (
 	"fmt"
-	"proof-generator/internal/domain")
+	"os"
+	"proof-generator/internal/domain"
+	"proof-generator/internal/game"
+)
 
 func main() {
-	fmt.Println("---------------------------Generator 1---------------------------")
+	var player1Generator domain.Generator
+	var player2Generator domain.Generator
 
-	fields1 := [][]bool {
-		{false, false, false},
-		{false, true, false},
-		{false, false, false},
+	for {
+		fmt.Println("\n=== Battleship Game ===")
+		fmt.Println("1. Init game")
+		fmt.Println("2. Play move")
+		fmt.Println("3. Exit")
+		fmt.Print("Choose option: ")
+
+		var choice int
+		_, err := fmt.Scanln(&choice)
+		if err != nil {
+			fmt.Println("Invalid input")
+			continue
+		}
+
+		switch choice {
+		case 1:
+			game.InitGame(&player1Generator, &player2Generator)
+		case 2:
+			game.Play()
+		case 3:
+			fmt.Println("Bye!")
+			os.Exit(0)
+		default:
+			fmt.Println("Unknown option")
+		}
 	}
-
-	board1 := domain.NewBoard(fields1)
-	generator1 := domain.NewGenerator(board1)
-
-	fmt.Println(generator1.MerkleTree)
-
-	data1, proof1 := generator1.GenerateProof(domain.Field{Row: 1, Column: 1})
-
-	fmt.Println(data1)
-	fmt.Println(proof1)
-
-	fmt.Println(generator1.VerifyProof(domain.Field{Row: 1, Column: 1}, proof1))
-
-	fmt.Println("---------------------------Generator 2---------------------------")
-
-	fields2 := [][]bool {
-		{false, true, false},
-		{false, false, false},
-		{false, false, false},
-	}
-
-	board2 := domain.NewBoard(fields2)
-	generator2 := domain.NewGenerator(board2)
-
-	fmt.Println(generator2.MerkleTree)
-
-	data2, proof2 := generator2.GenerateProof(domain.Field{Row: 1, Column: 0})
-
-	fmt.Println(data2)
-	fmt.Println(proof2)
-
-	fmt.Println(generator2.VerifyProof(domain.Field{Row: 1, Column: 0}, proof2))
-
 }

@@ -1,0 +1,9 @@
+{
+    "address": "wasm1th0vrcxf3c7qju8fr4ldufwr4clh6hxwafqu9k",
+    "stake": "1000",
+    "board" :[
+        [false, false, false],
+        [false, true,  true],
+        [false, false, false]
+    ]
+}

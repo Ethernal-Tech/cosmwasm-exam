@@ -33,6 +33,10 @@ func NewGenerator(board *Board) *Generator {
 	}
 }
 
+func (Generator *Generator) GetRoot() string {
+	return Generator.MerkleTree.Root.data
+}
+
 func (generator *Generator) GenerateProof(field Field) (string, []ProofStep) {
 	return generator.MerkleTree.GenerateProof(generator.Index[field])
 }

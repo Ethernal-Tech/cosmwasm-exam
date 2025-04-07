@@ -1,0 +1,15 @@
+{
+    "name": "BattleToken",
+    "symbol": "BTK",
+    "decimals": 6,
+    "initial_balances": [
+      {
+        "address": "wasm1th0vrcxf3c7qju8fr4ldufwr4clh6hxwafqu9k",
+        "amount": "100000000"
+      },
+      {
+        "address": "wasm1tnajctamf857crwfl5m5k0cr6e8a3h66zhjtps",
+        "amount": "100000000"
+      }
+    ]
+  }
