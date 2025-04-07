@@ -44,7 +44,7 @@ func LoadPlayerData(path string, generator *domain.Generator) (PlayerInstantiate
 	if err := json.Unmarshal(file, &data); err != nil {
 		return PlayerInstantiate{}, fmt.Errorf("invalid player file %s: %w", path, err)
 	}
-	generator = domain.NewGenerator(domain.NewBoard(data.Board))
+	*generator = *domain.NewGenerator(domain.NewBoard(data.Board))
 	root := generator.GetRoot()
 
 	return PlayerInstantiate{

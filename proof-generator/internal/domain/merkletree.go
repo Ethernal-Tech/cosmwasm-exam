@@ -22,8 +22,8 @@ type MerkleTree struct {
 }
 
 type ProofStep struct {
-	hash string;
-	isLeft bool;
+	Hash   string `json:"hash"`
+	IsLeft bool   `json:"is_left"`
 }
 
 func NewMerkleTree(data []string) *MerkleTree {
@@ -149,8 +149,8 @@ func (merkleTree *MerkleTree) GenerateProof(dataIndex int) (string, []ProofStep)
 			proof = append(
 				proof, 
 				ProofStep {
-					hash: node.left.data,
-					isLeft: true,
+					Hash: node.left.data,
+					IsLeft: true,
 				},
 			)
 		}
@@ -159,8 +159,8 @@ func (merkleTree *MerkleTree) GenerateProof(dataIndex int) (string, []ProofStep)
 			proof = append(
 				proof, 
 				ProofStep {
-					hash: node.right.data,
-					isLeft: false,
+					Hash: node.right.data,
+					IsLeft: false,
 				},
 			)
 		}
@@ -175,11 +175,11 @@ func (merkleTree *MerkleTree) VerifyProof(data string, proof []ProofStep) bool {
 	currentHash := hash(data)
 
 	for _, step := range proof {
-		if step.isLeft {
-			currentHash = hash(step.hash + currentHash)
+		if step.IsLeft {
+			currentHash = hash(step.Hash + currentHash)
 			continue
 		}
-		currentHash = hash(currentHash + step.hash)
+		currentHash = hash(currentHash + step.Hash)
 	}
 
 	return currentHash == merkleTree.Root.data

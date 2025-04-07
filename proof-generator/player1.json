@@ -3,7 +3,7 @@
     "stake": "1000",
     "board" :[
         [false, false, false],
-        [false, true,  true],
+        [false, true,  false],
         [false, false, false]
     ]
 }
