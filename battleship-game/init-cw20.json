@@ -11,5 +11,9 @@
         "address": "wasm1tnajctamf857crwfl5m5k0cr6e8a3h66zhjtps",
         "amount": "100000000"
       }
-    ]
+    ],
+    "mint": {
+      "minter": "wasm1e4wgnjvysg56ppgc8pwh33lte79qn39cnzrvgd",
+      "cap": null
+  }
   }
