@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"proof-generator/internal/domain"
-	"strings"
 	"time"
 )
 
@@ -35,6 +34,25 @@ type InstantiateMsg struct {
 	Players      []PlayerInstantiate `json:"players"`
 }
 
+type CodeIDs struct {
+	CW20CodeID string `json:"cw20_code_id"`
+	GameCodeID string `json:"game_code_id"`
+}
+
+func LoadCodeIDs() (*CodeIDs, error) {
+	data, err := os.ReadFile("code_ids.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read code_ids.json: %w", err)
+	}
+
+	var ids CodeIDs
+	if err := json.Unmarshal(data, &ids); err != nil {
+		return nil, fmt.Errorf("failed to parse code_ids.json: %w", err)
+	}
+
+	return &ids, nil
+}
+
 func LoadPlayerData(path string, generator *domain.Generator) (PlayerInstantiate, error) {
 	file, err := os.ReadFile(path)
 	if err != nil {
@@ -55,87 +73,14 @@ func LoadPlayerData(path string, generator *domain.Generator) (PlayerInstantiate
 	}, nil
 }
 
-func InstantiateCW20(codeID string, minter string, initialBalances []map[string]string) (string, error) {
-	type CW20InitMsg struct {
-		Name            string `json:"name"`
-		Symbol          string `json:"symbol"`
-		Decimals        int    `json:"decimals"`
-		InitialBalances []struct {
-			Address string `json:"address"`
-			Amount  string `json:"amount"`
-		} `json:"initial_balances"`
-		Mint struct {
-			Minter string  `json:"minter"`
-			Cap    *string `json:"cap"`
-		} `json:"mint"`
-	}
-
-	var msg CW20InitMsg
-	msg.Name = "BattleToken"
-	msg.Symbol = "BTK"
-	msg.Decimals = 6
-
-	for _, bal := range initialBalances {
-		msg.InitialBalances = append(msg.InitialBalances, struct {
-			Address string `json:"address"`
-			Amount  string `json:"amount"`
-		}{
-			Address: bal["address"],
-			Amount:  bal["amount"],
-		})
-	}
-
-	msg.Mint.Minter = minter
-	msg.Mint.Cap = nil
-
-	msgBytes, err := json.Marshal(msg)
-	if err != nil {
-		return "", fmt.Errorf("marshal cw20 init msg: %w", err)
-	}
-	fmt.Println("Instantiating CW20 with msg:\n", string(msgBytes))
-
-	cmd := exec.Command("wasmd", "tx", "wasm", "instantiate", codeID, string(msgBytes),
-		"--from=proof-generator",
-		"--label=cw20-init-minter",
-		"--admin=proof-generator",
-		"--chain-id=localnet",
-		"--keyring-backend=test",
-		"--gas=auto", "--gas-adjustment=1.3",
-		"--broadcast-mode=sync",
-		"-y",
-	)
-
-	fmt.Println("Instantiating CW20 with proof-generator as minter...")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("instantiate cw20 failed: %v\nOutput: %s", err, string(out))
-	}
-
-	cmdQuery := exec.Command("wasmd", "query", "wasm", "list-contract-by-code", codeID, "--output=json")
-	result, err := cmdQuery.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("query contracts failed: %w\nOutput: %s", err, string(result))
-	}
-	var parsed struct {
-		Contracts []string `json:"contracts"`
-	}
-	if err := json.Unmarshal(result, &parsed); err != nil {
-		return "", fmt.Errorf("parse contract list: %w", err)
-	}
-	return parsed.Contracts[len(parsed.Contracts)-1], nil
-}
-
-
-func InstantiateContract(msg InstantiateMsg) error {
+func InstantiateContract(msg InstantiateMsg, codeId string) error {
 	jsonBytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal instantiate msg: %w", err)
 	}
 	initMsg := string(jsonBytes)
 
-	codeID := "7"
-
-	cmd := exec.Command("wasmd", "tx", "wasm", "instantiate", codeID, initMsg,
+	cmd := exec.Command("wasmd", "tx", "wasm", "instantiate", codeId, initMsg,
 		"--from=proof-generator",
 		"--label=battleship",
 		"--admin="+msg.Admin,
@@ -153,9 +98,9 @@ func InstantiateContract(msg InstantiateMsg) error {
 		return fmt.Errorf("contract instantiation failed: %v\nOutput: %s", err, string(output))
 	}
 
-	fmt.Println("Contract instantiated:\n", string(output))
+	fmt.Println("Contract instantiated!")
 
-	address, err := GetLastContractAddressByCode("7")
+	address, err := GetLastContractAddressByCode(codeId)
 	if err != nil {
 		fmt.Println("Could not fetch contract address automatically:", err)
 	} else {
@@ -224,53 +169,11 @@ func SetCW20Minter(tokenAddr, minter, from string) error {
 		return fmt.Errorf("setting minter failed: %v\nOutput: %s", err, string(output))
 	}
 
-	var txhash string
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "txhash:") {
-			txhash = strings.TrimSpace(strings.TrimPrefix(line, "txhash:"))
-			break
-		}
-	}
-
-	if err := WaitForTxCommit(txhash); err != nil {
-		fmt.Println("TX not committed:", err)
-		return err
-	}
-
 	fmt.Println("Minter set successfully.")
 	return nil
 }
 
-func WaitForTxCommit(txHash string) error {
-	for i := 0; i < 100; i++ {
-		cmd := exec.Command("wasmd", "query", "tx", txHash, "--output=json")
-		out, err := cmd.CombinedOutput()
-		outputStr := string(out)
-
-		if err == nil && strings.Contains(outputStr, `"code": 0`) {
-			fmt.Println("Transaction committed:")
-			fmt.Println(outputStr)
-			return nil
-		}
-
-		// Handle "tx not found" error from CometBFT
-		if strings.Contains(outputStr, "rpc error") || strings.Contains(outputStr, "tx not found") {
-			fmt.Printf("TX not found yet (%d/100), waiting...\n", i+1)
-			time.Sleep(2 * time.Second)
-			continue
-		}
-
-		fmt.Printf("Unexpected error: %v\nOutput: %s\n", err, outputStr)
-		time.Sleep(2 * time.Second)
-	}
-
-	return fmt.Errorf("Transaction %s not found after retries", txHash)
-}
-
 func ApproveCW20(contractAddr, tokenAddr, player string, amount string) error {
-	fmt.Println("stake:", amount)
-	fmt.Println("cw20:", tokenAddr)
 	msg := map[string]interface{}{
 		"increase_allowance": map[string]interface{}{
 			"spender": contractAddr,
@@ -278,7 +181,6 @@ func ApproveCW20(contractAddr, tokenAddr, player string, amount string) error {
 		},
 	}
 	msgBytes, _ := json.Marshal(msg)
-	fmt.Println("msg:", string(msgBytes))
 
 	cmd := exec.Command("wasmd", "tx", "wasm", "execute", tokenAddr, string(msgBytes),
 		"--from="+player,
@@ -295,24 +197,6 @@ func ApproveCW20(contractAddr, tokenAddr, player string, amount string) error {
 	if err != nil {
 		return fmt.Errorf("approval failed for %s: %v\nOutput: %s", player, err, string(output))
 	}
-	fmt.Println("Allowance tx command output:")
-	fmt.Println(string(output))
-
-	var txhash string
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-	if strings.HasPrefix(line, "txhash:") {
-			txhash = strings.TrimSpace(strings.TrimPrefix(line, "txhash:"))
-			break
-		}
-	}
-
-	if err := WaitForTxCommit(txhash); err != nil {
-		fmt.Println("TX not committed:", err)
-		return err
-	}
-
-	time.Sleep(6 * time.Second)
 
 	fmt.Println("Approved:", player)
 	return nil
@@ -396,29 +280,20 @@ func InitGame(player1Generator *domain.Generator, player2Generator *domain.Gener
 		Players:      players,
 	}
 
-	cw20Addr, err := InstantiateCW20("6", msg.Admin, []map[string]string{
-		{"address": player1.Address, "amount": "100000000"},
-		{"address": player2.Address, "amount": "100000000"},
-	})
+
+	ids, err := LoadCodeIDs()
 	if err != nil {
-		fmt.Println("CW20 instantiation failed:", err)
+		fmt.Println("Failed to load code IDs:", err)
 		return
 	}
 
-	time.Sleep(5 * time.Second)
-
-	QueryBalance(cw20Addr, player1.Address)
-	QueryBalance(cw20Addr, player2.Address)
-
-	msg.TokenAddress = cw20Addr
-
-	err = InstantiateContract(msg)
+	err = InstantiateContract(msg, ids.GameCodeID)
 	if err != nil {
 		fmt.Println("Error instantiating:", err)
 		return
 	}
 
-	contractAddr, err := GetLastContractAddressByCode("7")
+	contractAddr, err := GetLastContractAddressByCode(ids.GameCodeID)
 	if err != nil {
 		fmt.Println("Could not fetch contract address automatically:", err)
 		return
@@ -432,7 +307,7 @@ func InitGame(player1Generator *domain.Generator, player2Generator *domain.Gener
 		return
 	}
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	err = ApproveCW20(contractAddr, msg.TokenAddress, "player1", player1.Stake)
 	if err != nil {
@@ -448,19 +323,7 @@ func InitGame(player1Generator *domain.Generator, player2Generator *domain.Gener
 		return
 	}
 
-	time.Sleep(10 * time.Second)
-
-	fmt.Println("== Checking CW20 allowances ==")
-
-	err = CheckAllowance(meta.TokenAddress, player1.Address, contractAddr)
-	if err != nil {
-		fmt.Println("Failed to check allowance for player1:", err)
-	}
-
-	err = CheckAllowance(meta.TokenAddress, player2.Address, contractAddr)
-	if err != nil {
-		fmt.Println("Failed to check allowance for player2:", err)
-	}
+	time.Sleep(5 * time.Second)
 
 	err = StartGame(contractAddr, msg.Players[0].Address)
 	if err != nil {
@@ -470,6 +333,62 @@ func InitGame(player1Generator *domain.Generator, player2Generator *domain.Gener
 
 	fmt.Println("Game successfully instantiated!")
 }
+
+func CheckGameStarted(contractAddr string) (bool, error) {
+	query := map[string]interface{}{
+		"get_started": map[string]interface{}{},
+	}
+	queryBytes, err := json.Marshal(query)
+	if err != nil {
+		return false, fmt.Errorf("failed to marshal get_started query: %w", err)
+	}
+
+	cmd := exec.Command("wasmd", "query", "wasm", "contract-state", "smart", contractAddr, string(queryBytes), "--output=json")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("failed to query get_started: %v\nOutput: %s", err, output)
+	}
+	println(string(output))
+
+	var parsed struct {
+		Data struct {
+			Value bool `json:"value"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &parsed); err != nil {
+		return false, fmt.Errorf("failed to parse get_started response: %w\nOutput: %s", err, output)
+	}
+
+	return parsed.Data.Value, nil
+}
+
+func QueryCW20Minter(cw20Addr string) (string, error) {
+	query := map[string]interface{}{
+		"minter": map[string]interface{}{},
+	}
+	queryBytes, err := json.Marshal(query)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal minter query: %w", err)
+	}
+
+	cmd := exec.Command("wasmd", "query", "wasm", "contract-state", "smart", cw20Addr, string(queryBytes), "--output=json")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to query minter: %v\nOutput: %s", err, string(output))
+	}
+
+	var parsed struct {
+		Data struct {
+			Minter string `json:"minter"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(output, &parsed); err != nil {
+		return "", fmt.Errorf("failed to parse minter response: %w\nOutput: %s", err, string(output))
+	}
+
+	return parsed.Data.Minter, nil
+}
+
 
 func CheckAllowance(cw20Addr, ownerAddr, spenderAddr string) error {
 	query := map[string]interface{}{

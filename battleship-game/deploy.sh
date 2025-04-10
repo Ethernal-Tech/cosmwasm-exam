@@ -5,7 +5,7 @@ set -e
 KEYRING=test
 CHAIN_ID=localnet
 FROM=proof-generator
-OUT_FILE=code_ids.json
+OUT_FILE=../proof-generator/code_ids.json
 
 ROOT_DIR=$(pwd)
 ARTIFACTS_DIR="$ROOT_DIR/artifacts"
@@ -25,7 +25,7 @@ TX=$(wasmd tx wasm store $CW20_WASM \
   --broadcast-mode sync --yes --output json)
 
 TX_HASH=$(echo $TX | jq -r '.txhash')
-sleep 2
+sleep 3
 QUERY=$(wasmd query tx $TX_HASH --output json)
 CW20_CODE_ID=$(echo $QUERY | jq -r '.logs[0].events[] | select(.type=="store_code") | .attributes[] | select(.key=="code_id") | .value')
 

@@ -30,7 +30,7 @@ func main() {
 		case 1:
 			game.InitGame(&player1Generator, &player2Generator)
 		case 2:
-			fmt.Println(currentPlayer)
+			fmt.Println("Turn:", currentPlayer)
 			if currentPlayer == "player1" {
 				game.Play(currentPlayer, &player1Generator)
 				currentPlayer = "player2"

@@ -43,7 +43,7 @@ func PlayMove(player string, contractAddr string, x, y int, value bool, proof []
 		return fmt.Errorf("play move failed: %v\nOutput: %s", err, string(output))
 	}
 
-	fmt.Println("Move played:\n", string(output))
+	fmt.Println("Move played!")
 	return nil
 }
 
@@ -69,7 +69,6 @@ func Play(playerName string, generator *domain.Generator) {
 	fmt.Scanln(&y)
 
 	field := domain.Field{Row: x, Column: y}
-	fmt.Println(generator.Board)
 	value := generator.Board.Fields[x][y]
 	_, proof := generator.GenerateProof(field)
 

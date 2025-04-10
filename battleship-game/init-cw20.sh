@@ -5,7 +5,7 @@ set -e
 KEYRING=test
 CHAIN_ID=localnet
 FROM=proof-generator
-CODE_ID=$(jq -r '.cw20_code_id' code_ids.json)
+CODE_ID=$(jq -r '.cw20_code_id' ../proof-generator/code_ids.json)
 INIT_FILE=init-cw20.json
 
 echo "Instantiating CW20 contract..."
