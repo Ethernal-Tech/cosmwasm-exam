@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::Uint128;
 
 use crate::state::Player;
 
@@ -20,11 +20,8 @@ pub struct InstantiateMsg {
 #[cw_serde]
 pub enum QueryMsg {
     GetPlayers {},
-    GetTurn {},
-    GetShips {},
-    GetStarted {},
-    GetFinished {},
-    GetTokenAddress {},
+    GetGameConfig {},
+    GetGameState {}
 }
 
 #[cw_serde]
@@ -47,21 +44,6 @@ pub enum ExecuteMsg {
 #[cw_serde]
 pub struct PlayersResponse {
     pub players: Vec<Player>
-}
-
-#[cw_serde]
-pub struct ShipsResponse {
-    pub ships: usize
-}
-
-#[cw_serde]
-pub struct AddressResponse {
-    pub address: Addr
-}
-
-#[cw_serde]
-pub struct BoolResponse {
-    pub value: bool
 }
 
 

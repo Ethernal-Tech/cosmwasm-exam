@@ -7,11 +7,12 @@ pub mod tests {
     use cw_multi_test::{App, ContractWrapper, Executor, IntoAddr};
     use cw20_base::contract::{instantiate as cw20_instantiate, execute as cw20_execute, query as cw20_query};
     use cw20_base::msg::{InstantiateMsg as Cw20InstantiateMsg, ExecuteMsg as Cw20ExecuteMsg};
-    use crate::msg::{BoolResponse, ProofStep};
+    use crate::msg::ProofStep;
+    use crate::state::{GameConfig, GameState};
     use crate::{
         contract::{execute, instantiate, query}, 
         msg::{
-            ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg, ShipsResponse, AddressResponse
+            ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg
         }, state::Player, ContractError
     };
 
@@ -136,40 +137,20 @@ pub mod tests {
         let player2_addr = "player2".into_addr();
         let (cw20_address, address, app) = init_app(player1_addr, player2_addr);
 
-        let response: ShipsResponse = app
+        let response: GameConfig = app
             .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetShips {})
+            .query_wasm_smart(address.clone(), &QueryMsg::GetGameConfig {})
             .unwrap();
-
         assert_eq!(response.ships, 1);
+        assert_eq!(response.token_address, cw20_address);
 
-        let response: AddressResponse = app
+        let response: GameState = app
             .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetTurn {  })
+            .query_wasm_smart(address.clone(), &QueryMsg::GetGameState {})
             .unwrap();
-
-        assert_eq!(response.address, "player1".into_addr());
-
-        let response: AddressResponse = app
-            .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetTokenAddress {  })
-            .unwrap();
-
-        assert_eq!(response.address, cw20_address);
-
-        let response: BoolResponse = app
-            .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetStarted {  })
-            .unwrap();
-
-        assert_eq!(response.value, false);
-
-        let response: BoolResponse = app
-            .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetFinished {  })
-            .unwrap();
-
-        assert_eq!(response.value, false);
+        assert_eq!(response.turn, "player1".into_addr());
+        assert_eq!(response.started, false);
+        assert_eq!(response.finished, false);
 
         let response: Vec<Player> = app
             .wrap()
