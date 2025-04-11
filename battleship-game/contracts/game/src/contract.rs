@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::{
     msg::{ExecuteMsg, InstantiateMsg, QueryMsg}, 
-    state::{Board, Player, ADMIN, FINISHED, MIN_STAKE, PLAYERS, SHIPS, STARTED, TOKEN_ADDRESS, TURN}, ContractError
+    state::{Board, Player, FINISHED, MIN_STAKE, PLAYERS, SHIPS, STARTED, TOKEN_ADDRESS, TURN}, ContractError
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -16,8 +16,6 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg
 ) -> Result<Response, ContractError> {
-    ADMIN.save(deps.storage, &deps.api.addr_validate(&msg.admin)?)?;
-
     TOKEN_ADDRESS.save(deps.storage, &deps.api.addr_validate(&msg.token_address)?)?;
 
     STARTED.save(deps.storage, &false)?;
@@ -66,20 +64,6 @@ pub fn instantiate(
     Ok(Response::new())
 }
 
-pub fn validate_board(board: &Vec<Vec<bool>>, ships: usize) -> bool {
-    let mut count = 0;
-
-    for row in board {
-        for cell in row {
-            if *cell {
-                count += 1;
-            }
-        }
-    }
-
-    count == ships
-}
-
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -104,7 +88,6 @@ pub fn query(
     msg: QueryMsg
 ) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetAdmin {} => to_json_binary(&query::get_admin(deps)?),
         QueryMsg::GetPlayers {} => to_json_binary(&query::get_players(deps)?),
         QueryMsg::GetShips {} => to_json_binary(&query::get_ships(deps)?),
         QueryMsg::GetTurn {} => to_json_binary(&query::get_turn(deps)?),
@@ -413,14 +396,9 @@ mod execute {
 mod query {
     use cosmwasm_std::Order;
 
-    use crate::{msg::{AddressResponse, AdminResponse, BoolResponse, ShipsResponse}, state::TURN};
+    use crate::{msg::{AddressResponse, BoolResponse, ShipsResponse}, state::TURN};
 
     use super::*;
-
-    pub fn get_admin(deps: Deps) -> StdResult<AdminResponse> {
-        let admin = ADMIN.load(deps.storage);
-        Ok(AdminResponse { admin: admin? })
-    }
 
     pub fn get_players(deps: Deps) -> StdResult<Vec<Player>> {
         PLAYERS

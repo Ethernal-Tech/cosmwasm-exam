@@ -11,13 +11,12 @@ pub mod tests {
     use crate::{
         contract::{execute, instantiate, query}, 
         msg::{
-            AdminResponse, ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg, ShipsResponse, AddressResponse
+            ExecuteMsg, InstantiateMsg, PlayerInstantiate, QueryMsg, ShipsResponse, AddressResponse
         }, state::Player, ContractError
     };
 
     pub fn mock_instantiate_msg(ships: usize, token_address: Addr) -> InstantiateMsg {
         InstantiateMsg {
-            admin: "admin".into_addr().to_string(),
             ships: ships,
             token_address: token_address.to_string(),
             players: vec![
@@ -98,7 +97,7 @@ pub mod tests {
         ).unwrap();
 
         app.execute_contract(
-            admin_addr,
+            "owner".into_addr(),
             cw20_addr.clone(),
             &Cw20ExecuteMsg::UpdateMinter {
                 new_minter: Some(game_addr.to_string()),
@@ -136,13 +135,6 @@ pub mod tests {
         let player1_addr = "player1".into_addr();
         let player2_addr = "player2".into_addr();
         let (cw20_address, address, app) = init_app(player1_addr, player2_addr);
-
-        let response: AdminResponse = app
-            .wrap()
-            .query_wasm_smart(address.clone(), &QueryMsg::GetAdmin {  })
-            .unwrap();
-
-        assert_eq!(response.admin, "admin".into_addr());
 
         let response: ShipsResponse = app
             .wrap()

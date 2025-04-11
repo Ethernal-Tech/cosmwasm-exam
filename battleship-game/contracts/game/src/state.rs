@@ -2,9 +2,6 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Item, Map};
 
-// admin account, for minting
-pub const ADMIN: Item<Addr> = Item::new("admin");
-
 // token contract address
 pub const TOKEN_ADDRESS: Item<Addr> = Item::new("token_address");
 

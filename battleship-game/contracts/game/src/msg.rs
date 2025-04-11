@@ -12,7 +12,6 @@ pub struct PlayerInstantiate {
 
 #[cw_serde]
 pub struct InstantiateMsg {
-    pub admin: String,
     pub token_address: String,
     pub ships: usize,
     pub players: Vec<PlayerInstantiate>,
@@ -20,7 +19,6 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum QueryMsg {
-    GetAdmin {},
     GetPlayers {},
     GetTurn {},
     GetShips {},
@@ -44,11 +42,6 @@ pub enum ExecuteMsg {
         proof: Vec<ProofStep>
     },
     TimeoutWin {},
-}
-
-#[cw_serde]
-pub struct AdminResponse {
-    pub admin: Addr
 }
 
 #[cw_serde]
