@@ -26,6 +26,8 @@ impl TokenInfo {
     }
 }
 
+pub const ADMIN: Item<Addr> = Item::new("admin");
+
 pub const TOKEN_INFO: Item<TokenInfo> = Item::new("token_info");
 pub const MARKETING_INFO: Item<MarketingInfoResponse> = Item::new("marketing_info");
 pub const LOGO: Item<Logo> = Item::new("logo");

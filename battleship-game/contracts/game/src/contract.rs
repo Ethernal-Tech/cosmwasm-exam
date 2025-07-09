@@ -6,7 +6,7 @@ use cosmwasm_std::{
 
 use crate::{
     msg::{ExecuteMsg, InstantiateMsg, QueryMsg}, 
-    state::{Board, Player, ADMIN, FINISHED, MIN_STAKE, PLAYERS, SHIPS, STARTED, TOKEN_ADDRESS, TURN}, ContractError
+    state::{Board, GameConfig, GameState, Player, GAME_CONFIG, GAME_STATE, MIN_STAKE, PLAYERS}, ContractError
 };
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -16,21 +16,24 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg
 ) -> Result<Response, ContractError> {
-    ADMIN.save(deps.storage, &deps.api.addr_validate(&msg.admin)?)?;
-
-    TOKEN_ADDRESS.save(deps.storage, &deps.api.addr_validate(&msg.token_address)?)?;
-
-    STARTED.save(deps.storage, &false)?;
 
     let ships = msg.ships;
     if ships == 0 {
         return Err(ContractError::InvalidShips {});
     }
-    SHIPS.save(deps.storage, &ships)?;
+    let game_config = GameConfig { 
+        token_address: deps.api.addr_validate(&msg.token_address)?, 
+        ships: ships 
+    };
+    GAME_CONFIG.save(deps.storage, &game_config)?;
 
-    TURN.save(deps.storage, &deps.api.addr_validate(&msg.players[0].address)?)?;
-
-    FINISHED.save(deps.storage, &false)?;
+    let game_state = GameState { 
+        started: false, 
+        finished: false, 
+        turn: deps.api.addr_validate(&msg.players[0].address)?, 
+        last_turn_time: 0 
+    };
+    GAME_STATE.save(deps.storage, &game_state)?;
 
     if msg.players[0].stake < Uint128::new(MIN_STAKE) {
         return Err(ContractError::InvalidStake {})
@@ -43,10 +46,6 @@ pub fn instantiate(
     for player in msg.players {
         let address = deps.api.addr_validate(&player.address)?;
         let stake = player.stake;
-        
-        if !validate_board(&player.board, ships) {
-            return Err(ContractError::InvalidBoard {});
-        }
 
         let board = Board {
             fields: player.board,
@@ -65,20 +64,6 @@ pub fn instantiate(
     Ok(Response::new())
 }
 
-pub fn validate_board(board: &Vec<Vec<bool>>, ships: usize) -> bool {
-    let mut count = 0;
-
-    for row in board {
-        for cell in row {
-            if *cell {
-                count += 1;
-            }
-        }
-    }
-
-    count == ships
-}
-
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
@@ -87,9 +72,12 @@ pub fn execute(
     msg: ExecuteMsg
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::StartGame {} => execute::start_game(deps, env, info),
-        ExecuteMsg::Play {field} => execute::play(deps, env, info, field),
-        ExecuteMsg::TimeoutWin {} => execute::timeout_win(deps, env, info)
+        ExecuteMsg::StartGame {} => 
+            execute::start_game(deps, env, info),
+        ExecuteMsg::Play {field, value, proof} => 
+            execute::play(deps, env, info, field, value, proof),
+        ExecuteMsg::TimeoutWin {} => 
+            execute::timeout_win(deps, env, info)
     }
 }
 
@@ -100,23 +88,19 @@ pub fn query(
     msg: QueryMsg
 ) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetAdmin {} => to_json_binary(&query::get_admin(deps)?),
         QueryMsg::GetPlayers {} => to_json_binary(&query::get_players(deps)?),
-        QueryMsg::GetShips {} => to_json_binary(&query::get_ships(deps)?),
-        QueryMsg::GetTurn {} => to_json_binary(&query::get_turn(deps)?),
-        QueryMsg::GetStarted {} => to_json_binary(&query::get_started(deps)?),
-        QueryMsg::GetFinished {} => to_json_binary(&query::get_finished(deps)?),
-        QueryMsg::GetTokenAddress {} => to_json_binary(&query::get_token_address(deps)?),
+        QueryMsg::GetGameConfig {} => to_json_binary(&query::get_game_config(deps)?),
+        QueryMsg::GetGameState {} => to_json_binary(&query::get_game_state(deps)?),
     }
 }
 
 mod execute {
-    use std::vec;
-
     use cosmwasm_std::{Addr, Event, Order};
     use cw20::Cw20ExecuteMsg;
+    use sha2::{Digest, Sha256};
+    use hex;
 
-    use crate::state::{FEE_PERCENTAGE, LAST_TURN_TIME, REWARD_PERCENTAGE, TURN_DURATION};
+    use crate::{msg::ProofStep, state::{FEE_PERCENTAGE, REWARD_PERCENTAGE, TURN_DURATION}};
 
     use super::*;
 
@@ -125,12 +109,15 @@ mod execute {
         env: Env,
         info: MessageInfo
     ) -> Result<Response, ContractError> {
-        if FINISHED.load(deps.storage)? {
-            return Err(ContractError::GameFinished {});
+        let game_config = GAME_CONFIG.load(deps.storage)?;
+        let mut game_state = GAME_STATE.load(deps.storage)?;
+
+        if game_state.started {
+            return Err(ContractError::GameStarted {});
         }
 
-        if STARTED.load(deps.storage)? {
-            return Err(ContractError::GameStarted {});
+        if game_state.finished {
+            return Err(ContractError::GameFinished {});
         }
 
         let caller = info.sender.clone();
@@ -142,7 +129,7 @@ mod execute {
             return Err(ContractError::Unauthorized{});
         }
 
-        let token_addr = TOKEN_ADDRESS.load(deps.storage)?;
+        let token_addr = game_config.token_address;
         let mut messages: Vec<cosmwasm_std::CosmosMsg> = vec![];
 
         for player in &players {
@@ -160,8 +147,9 @@ mod execute {
             );
         }
 
-        STARTED.save(deps.storage, &true)?;
-        LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
+        game_state.started = true;
+        game_state.last_turn_time = env.block.time.seconds();
+        GAME_STATE.save(deps.storage, &game_state)?;
 
         Ok(Response::new()
             .add_attribute("action", "start_game")
@@ -175,27 +163,32 @@ mod execute {
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        field: (usize, usize)
+        field: (usize, usize),
+        field_value: bool,
+        proof: Vec<ProofStep>
     ) -> Result<Response, ContractError> {
-        if !STARTED.load(deps.storage)? {
+        let game_config = GAME_CONFIG.load(deps.storage)?;
+        let mut game_state = GAME_STATE.load(deps.storage)?;
+
+        if !game_state.started {
             return Err(ContractError::GameNotStarted {});
         }
 
-        if FINISHED.load(deps.storage)? {
+        if game_state.finished {
             return Err(ContractError::GameFinished {});
         }
 
-        if env.block.time.seconds() > LAST_TURN_TIME.load(deps.storage)? + TURN_DURATION {
+        if env.block.time.seconds() > game_state.last_turn_time + TURN_DURATION {
             return Err(ContractError::TurnExpired {  });
         }
 
         let player = info.sender;
-        if player != TURN.load(deps.storage)? {
+        if player != game_state.turn {
             return Err(ContractError::WrongTurn {  })
         }
         let player = PLAYERS.load(deps.storage, player)?;
 
-        let oponent = PLAYERS
+        let opponent = PLAYERS
             .range(deps.storage, None, None, Order::Ascending)
             .find_map(|item| {
                 let (addr, player_data) = item.ok()?;
@@ -207,30 +200,38 @@ mod execute {
         })
         .ok_or(ContractError::PlayerNotFound {  });
 
-        let oponent = oponent?;
+        let opponent = opponent?;
 
-        let oponent_sunk = &oponent.board.sank;
-        if oponent_sunk.contains(&field) {
+        if !verify_proof(field_value, proof, &opponent.board.fields) {
+            return Err(ContractError::InvalidProof {  });
+        }
+
+        let opponent_sunk = &opponent.board.sank;
+        if opponent_sunk.contains(&field) {
             return Err(ContractError::AlreadySunk {});
         }
 
-        LAST_TURN_TIME.save(deps.storage, &env.block.time.seconds())?;
-        let oponent_board = &oponent.board.fields;
-        if oponent_board[field.0][field.1] {
-            let oponent = PLAYERS.update::<_, ContractError>(deps.storage, oponent.address.clone(), |player| {
-                let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
-                player.board.sank.push(field);
-                Ok(player)
-            })?;
+        game_state.last_turn_time = env.block.time.seconds();
+        if field_value {
+            let opponent = PLAYERS
+                .update::<_, ContractError>(
+                    deps.storage, 
+                    opponent.address.clone(), 
+                    |player| {
+                        let mut player = player.ok_or(ContractError::PlayerNotFound {})?;
+                        player.board.sank.push(field);
+                        Ok(player)
+                    }
+                )?;
 
-            if oponent.board.sank.len() == SHIPS.load(deps.storage)? {
-                FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
+            if opponent.board.sank.len() == game_config.ships {
+                game_state.finished = true;
 
-                let total_amount = player.stake + oponent.stake;
+                let total_amount = player.stake + opponent.stake;
                 let fee = total_amount.multiply_ratio(FEE_PERCENTAGE, 100u128);
                 let payout = total_amount.checked_sub(fee)
                     .map_err(|_| ContractError::Overflow {})?;
-                let token_address = TOKEN_ADDRESS.load(deps.storage)?;
+                let token_address = game_config.token_address;
 
                 //transfer funds to winner
                 let transfer_msg = transfer(
@@ -247,6 +248,8 @@ mod execute {
                     token_address
                 )?;
 
+                GAME_STATE.save(deps.storage, &game_state)?;
+
                 return Ok(Response::new()
                     .add_attribute("action", "play")
                     .add_attribute("winner", player.address.to_string())
@@ -259,7 +262,8 @@ mod execute {
                 );
             }
 
-            TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
+            game_state.turn = opponent.address;
+            GAME_STATE.save(deps.storage, &game_state)?;
             return Ok(
                 Response::new()
                     .add_attribute("action", "play")
@@ -267,7 +271,8 @@ mod execute {
             );
         }
 
-        TURN.update::<_, ContractError>(deps.storage, |_| Ok(oponent.address.clone()))?;
+        game_state.turn = opponent.address;
+        GAME_STATE.save(deps.storage, &game_state)?;
         Ok(
             Response::new()
                 .add_attribute("action", "play")
@@ -276,39 +281,65 @@ mod execute {
 
     }
 
+    pub fn verify_proof(value: bool, proof: Vec<ProofStep>, merkle_root: &str) -> bool {
+        let mut current_hash = hash(value.to_string());
+        println!("{}", value);
+
+        for step in proof {
+            println!("{}", current_hash);
+            if step.is_left {
+                current_hash = hash(step.hash + &current_hash);
+                continue;
+            }
+            current_hash = hash(current_hash + &step.hash);
+        }
+
+        return current_hash == merkle_root;
+    }
+
+    pub fn hash(item: String) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(item.as_bytes());
+        let result = hasher.finalize();
+        hex::encode(result)
+    }
+
     pub fn timeout_win(
         deps: DepsMut,
         env: Env,
         info: MessageInfo
     ) -> Result<Response, ContractError> {
-        if !STARTED.load(deps.storage)? {
+        let game_config = GAME_CONFIG.load(deps.storage)?;
+        let mut game_state = GAME_STATE.load(deps.storage)?;
+
+        if !game_state.started {
             return Err(ContractError::GameNotStarted {});
         }
 
-        if FINISHED.load(deps.storage)? {
+        if game_state.finished {
             return Err(ContractError::GameFinished {});
         }
 
         let player = PLAYERS.load(deps.storage, info.sender)?;
-        let oponnent_address = TURN.load(deps.storage)?;
+        let opponent_address = game_state.turn.clone();
 
-        if player.address == oponnent_address {
+        if player.address == opponent_address {
             return Err(ContractError::Unauthorized {  })
         }
 
         let now = env.block.time.seconds();
-        if now <= LAST_TURN_TIME.load(deps.storage)? + TURN_DURATION {
+        if now <= game_state.last_turn_time + TURN_DURATION {
             return Err(ContractError::TurnNotExpired {  });
         }
 
-        FINISHED.update::<_, ContractError>(deps.storage, |_| Ok(true))?;
+        game_state.finished = true;
 
-        let oponent = PLAYERS.load(deps.storage, oponnent_address)?;
-        let total_amount = player.stake + oponent.stake;
+        let opponent = PLAYERS.load(deps.storage, opponent_address)?;
+        let total_amount = player.stake + opponent.stake;
         let fee = total_amount.multiply_ratio(FEE_PERCENTAGE, 100u128);
         let payout = total_amount.checked_sub(fee)
             .map_err(|_| ContractError::Overflow {})?;
-        let token_address = TOKEN_ADDRESS.load(deps.storage)?;
+        let token_address = game_config.token_address;
 
         //transfer funds to winner
         let transfer_msg = transfer(
@@ -324,6 +355,8 @@ mod execute {
             reward, 
             token_address
         )?;
+
+        GAME_STATE.save(deps.storage, &game_state)?;
 
         return Ok(Response::new()
             .add_attribute("action", "timeout_check")
@@ -374,14 +407,7 @@ mod execute {
 mod query {
     use cosmwasm_std::Order;
 
-    use crate::{msg::{AddressResponse, AdminResponse, BoolResponse, ShipsResponse}, state::TURN};
-
     use super::*;
-
-    pub fn get_admin(deps: Deps) -> StdResult<AdminResponse> {
-        let admin = ADMIN.load(deps.storage);
-        Ok(AdminResponse { admin: admin? })
-    }
 
     pub fn get_players(deps: Deps) -> StdResult<Vec<Player>> {
         PLAYERS
@@ -393,37 +419,14 @@ mod query {
             .collect()
     }
 
-    pub fn get_ships(deps: Deps) -> StdResult<ShipsResponse> {
-        let ships = SHIPS.load(deps.storage);
-        Ok(ShipsResponse { ships: ships? })
+    pub fn get_game_config(deps: Deps) -> StdResult<GameConfig> {
+        let game_config = GAME_CONFIG.load(deps.storage)?;
+        Ok(game_config)
     }
 
-    pub fn get_turn(deps: Deps) -> StdResult<AddressResponse> {
-        let turn = TURN.load(deps.storage);
-        Ok(AddressResponse { address: turn? })
+    pub fn get_game_state(deps: Deps) -> StdResult<GameState> {
+        let game_state = GAME_STATE.load(deps.storage)?;
+        Ok(game_state)
     }
 
-    pub fn get_started(deps: Deps) -> StdResult<BoolResponse> {
-        Ok(
-            BoolResponse { 
-                value: STARTED.load(deps.storage)?
-            }
-        )
-    }
-
-    pub fn get_finished(deps: Deps) -> StdResult<BoolResponse> {
-        Ok(
-            BoolResponse { 
-                value: FINISHED.load(deps.storage)?
-            }
-        )
-    }
-
-    pub fn get_token_address(deps: Deps) -> StdResult<AddressResponse> {
-        Ok(
-            AddressResponse { 
-                address: TOKEN_ADDRESS.load(deps.storage)?
-            }
-        )
-    }
 }

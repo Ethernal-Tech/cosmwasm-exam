@@ -2,21 +2,27 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::{Item, Map};
 
-// admin account, for minting
-pub const ADMIN: Item<Addr> = Item::new("admin");
+#[cw_serde]
+pub struct GameConfig {
+    pub token_address: Addr,
+    pub ships: usize,
+}
 
-// token contract address
-pub const TOKEN_ADDRESS: Item<Addr> = Item::new("token_address");
+pub const GAME_CONFIG: Item<GameConfig> = Item::new("game_config");
 
-// flag for game start
-pub const STARTED: Item<bool> = Item::new("started");
+#[cw_serde]
+pub struct GameState {
+    pub started: bool,
+    pub finished: bool,
+    pub turn: Addr,
+    pub last_turn_time: u64,
+}
 
-// amount of ships to sink
-pub const SHIPS: Item<usize> = Item::new("ships");
+pub const GAME_STATE: Item<GameState> = Item::new("game_state");
 
 #[cw_serde]
 pub struct Board {
-    pub fields: Vec<Vec<bool>>,
+    pub fields: String,
     pub sank: Vec<(usize, usize)>,
 }
 
@@ -30,14 +36,7 @@ pub struct Player {
 // game boards (map): addr: player, each player has his own staked assets and a board
 pub const PLAYERS: Map<Addr, Player> = Map::new("players");
 
-// current turn
-pub const TURN: Item<Addr> = Item::new("turn");
-
-pub const LAST_TURN_TIME: Item<u64> = Item::new("last_turn_time");
-
-// game finished
-pub const FINISHED: Item<bool> = Item::new("finished");
-
+// constants for rewards
 pub const MIN_STAKE: u128 = 50u128;
 pub const REWARD_PERCENTAGE: u128 = 1u128;
 pub const FEE_PERCENTAGE: u128 = 5u128;

@@ -19,8 +19,7 @@ use crate::enumerable::{query_all_accounts, query_owner_allowances, query_spende
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{
-    MinterData, TokenInfo, ALLOWANCES, ALLOWANCES_SPENDER, BALANCES, LOGO, MARKETING_INFO,
-    TOKEN_INFO,
+    MinterData, TokenInfo, ADMIN, ALLOWANCES, ALLOWANCES_SPENDER, BALANCES, LOGO, MARKETING_INFO, TOKEN_INFO
 };
 
 // version info for migration info
@@ -94,9 +93,12 @@ fn verify_logo(logo: &Logo) -> Result<(), ContractError> {
 pub fn instantiate(
     mut deps: DepsMut,
     _env: Env,
-    _info: MessageInfo,
+    info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+
+    ADMIN.save(deps.storage, &info.sender)?;
+
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     // check valid token info
     msg.validate()?;
@@ -387,10 +389,13 @@ pub fn execute_update_minter(
         .may_load(deps.storage)?
         .ok_or(ContractError::Unauthorized {})?;
 
-    let mint = config.mint.as_ref().ok_or(ContractError::Unauthorized {})?;
-    if mint.minter != info.sender {
+    let admin = ADMIN.load(deps.storage)?;
+
+    if info.sender != admin {
         return Err(ContractError::Unauthorized {});
     }
+
+    let mint = config.mint.as_ref().ok_or(ContractError::Unauthorized {})?;
 
     let minter_data = new_minter
         .map(|new_minter| deps.api.addr_validate(&new_minter))
